@@ -309,6 +309,21 @@ const statusStyle = {
 
 const days = ["월", "화", "수", "목", "금", "토", "일"];
 
+// 가족 전체가 같은 일정을 보려면 Firebase Realtime Database 주소를 입력하세요.
+// 예: "https://hakwon-angani-default-rtdb.asia-southeast1.firebasedatabase.app"
+// 주소를 비워두면 기존처럼 각 휴대폰에만 저장됩니다.
+const FIREBASE_DATABASE_URL = "https://hakwon-angani-default-rtdb.firebaseio.com";
+const FAMILY_SHARE_CODE = "han-family";
+
+function isCloudSyncEnabled() {
+  return FIREBASE_DATABASE_URL.trim().length > 0;
+}
+
+function getCloudUrl() {
+  const baseUrl = FIREBASE_DATABASE_URL.replace(/\/$/, "");
+  return `${baseUrl}/families/${FAMILY_SHARE_CODE}.json`;
+}
+
 function timeToMinutes(time) {
   if (!time || !time.includes(":")) return 0;
   const [h, m] = time.split(":").map(Number);
@@ -404,6 +419,43 @@ function saveAlertSettingToStorage(alertTime) {
   } catch {
     // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
   }
+}
+
+function loadSavedLocationChecks() {
+  try {
+    if (typeof localStorage === "undefined") return {};
+    const saved = localStorage.getItem("hakwonLocationChecks");
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocationChecksToStorage(locationChecks) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonLocationChecks", JSON.stringify(locationChecks));
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
+}
+
+async function loadCloudFamilyData() {
+  if (!isCloudSyncEnabled()) return null;
+  const response = await fetch(getCloudUrl());
+  if (!response.ok) throw new Error("cloud-load-failed");
+  return response.json();
+}
+
+async function saveCloudFamilyData(data) {
+  if (!isCloudSyncEnabled()) return;
+  const response = await fetch(getCloudUrl(), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...data, updatedAt: new Date().toISOString() }),
+  });
+  if (!response.ok) throw new Error("cloud-save-failed");
 }
 
 async function safeCopyText(text) {
@@ -508,7 +560,9 @@ export default function App() {
   );
   const [sentAlertIds, setSentAlertIds] = useState([]);
   const [appAlerts, setAppAlerts] = useState([]);
-  const [locationChecks, setLocationChecks] = useState({});
+  const [locationChecks, setLocationChecks] = useState(loadSavedLocationChecks);
+  const [syncStatus, setSyncStatus] = useState(isCloudSyncEnabled() ? "공유 연결 중" : "기기 저장 모드");
+  const [cloudLoaded, setCloudLoaded] = useState(!isCloudSyncEnabled());
   const [nowTick, setNowTick] = useState(Date.now());
   const [copyMessage, setCopyMessage] = useState("");
   const [activeMenu, setActiveMenu] = useState("home");
@@ -525,6 +579,54 @@ export default function App() {
   useEffect(() => {
     saveAlertSettingToStorage(defaultAlertTime);
   }, [defaultAlertTime]);
+
+  useEffect(() => {
+    saveLocationChecksToStorage(locationChecks);
+  }, [locationChecks]);
+
+  useEffect(() => {
+    if (!isCloudSyncEnabled()) return;
+    let cancelled = false;
+
+    const loadSharedData = async () => {
+      try {
+        setSyncStatus("가족 일정 불러오는 중");
+        const data = await loadCloudFamilyData();
+        if (cancelled) return;
+        if (data?.schedules) setSchedules(data.schedules);
+        if (data?.locationChecks) setLocationChecks(data.locationChecks);
+        if (data?.defaultAlertTime) setDefaultAlertTime(data.defaultAlertTime);
+        setSyncStatus("가족 공유 중");
+      } catch {
+        if (!cancelled) setSyncStatus("공유 연결 실패 · 기기 저장 중");
+      } finally {
+        if (!cancelled) setCloudLoaded(true);
+      }
+    };
+
+    loadSharedData();
+    const poller = setInterval(loadSharedData, 15000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(poller);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isCloudSyncEnabled() || !cloudLoaded) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await saveCloudFamilyData({ schedules, locationChecks, defaultAlertTime });
+        setSyncStatus("가족 공유 중");
+      } catch {
+        setSyncStatus("공유 저장 실패 · 다시 시도 필요");
+      }
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [schedules, locationChecks, defaultAlertTime, cloudLoaded]);
 
   const child = children.find((c) => c.id === selectedChild);
   const current = useMemo(
@@ -832,6 +934,8 @@ export default function App() {
           ))}
         </div>
 
+        <SyncStatusBadge syncStatus={syncStatus} />
+
         <MainMenu activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
 
         {activeMenu === "home" &&
@@ -893,6 +997,16 @@ export default function App() {
   );
 }
 
+function SyncStatusBadge({ syncStatus }) {
+  return (
+    <div className="mb-2 flex justify-end">
+      <span className="rounded-full bg-white/70 px-3 py-1 text-[11px] font-bold text-rose-400 shadow-sm">
+        {syncStatus}
+      </span>
+    </div>
+  );
+}
+
 function MainMenu({ activeMenu, setActiveMenu }) {
   const menus = [
     { id: "home", label: "홈", icon: <Home size={17} /> },
@@ -948,7 +1062,9 @@ function WebAppGuidePanel({ onCopy, onShare, copyMessage, defaultAlertTime, onDe
       title: "버전 정보",
       desc: "학원 안가니? v0.1.0",
       icon: <Info size={20} />,
-      detail: "현재 버전은 일정 저장, 알림 테스트, 홈 화면 추가 안내가 포함된 웹앱 시제품입니다.",
+      detail: isCloudSyncEnabled()
+        ? "현재 버전은 가족 공유 저장소와 연결되어 엄마·아빠·아이 화면에서 같은 일정을 볼 수 있습니다."
+        : "현재 버전은 기기별 저장 모드입니다. Firebase 주소를 입력하면 가족 공유 모드로 사용할 수 있습니다.",
     },
   ];
 
