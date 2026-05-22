@@ -332,9 +332,14 @@ export default function App() {
       <div className="mx-auto max-w-md px-4 py-5">
         <header className="mb-5">
           <div className="mb-4">
-            <p className="text-sm font-medium text-emerald-700">초등학생 동선 알림앱</p>
-            <h1 className="text-3xl font-black tracking-tight">학원 안가니?</h1>
-          </div>
+  <p className="text-sm font-medium text-emerald-700">초등학생 동선 알림앱</p>
+  <div className="mt-1 flex items-center gap-3">
+    <h1 className="text-3xl font-black tracking-tight">학원 안가니?</h1>
+    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-pink-100 text-xl shadow-sm">
+      👩
+    </div>
+  </div>
+</div>
           <div className="grid grid-cols-2 rounded-3xl bg-white p-1 shadow-sm border border-slate-100">
             <button
               onClick={() => setRole("child")}
