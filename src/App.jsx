@@ -42,10 +42,10 @@ function CardContent({ className = "", children }) {
 function Button({ className = "", variant = "default", size = "default", disabled, children, ...props }) {
   const base = "inline-flex items-center justify-center font-bold transition disabled:pointer-events-none disabled:opacity-50";
   const variants = {
-    default: "bg-emerald-600 text-white hover:bg-emerald-700",
-    secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200",
-    outline: "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
+    default: "bg-rose-400 text-white hover:bg-rose-500",
+    secondary: "bg-rose-50 text-rose-900 hover:bg-rose-100",
+    outline: "border border-rose-100 bg-white text-slate-700 hover:bg-rose-50",
+    danger: "bg-red-500 text-white hover:bg-red-600",
   };
   const sizes = {
     default: "px-4 py-2",
@@ -301,6 +301,7 @@ const statusStyle = {
   "이동 중": "bg-orange-100 text-orange-700",
   "도착 완료": "bg-green-100 text-green-700",
   "귀가 완료": "bg-emerald-100 text-emerald-700",
+  "위치 확인": "bg-cyan-100 text-cyan-700",
   "수업 중": "bg-purple-100 text-purple-700",
   끝남: "bg-zinc-100 text-zinc-500",
   미확인: "bg-red-100 text-red-700",
@@ -358,6 +359,14 @@ function getCurrentSchedule(schedules, childId, selectedDay, nowMinutes = getNow
   return next || childSchedules[childSchedules.length - 1];
 }
 
+function getNextRemainingSchedule(schedules, nowMinutes = getNowMinutes(), excludeId = null) {
+  return [...(schedules || [])]
+    .filter((s) => s.id !== excludeId)
+    .filter((s) => !["끝남", "귀가 완료"].includes(s.status))
+    .filter((s) => timeToMinutes(s.start) > nowMinutes)
+    .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))[0] || null;
+}
+
 function loadSavedSchedules() {
   try {
     if (typeof localStorage === "undefined") return defaultSchedules;
@@ -372,6 +381,25 @@ function saveSchedulesToStorage(schedules) {
   try {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem("hakwonSchedules", JSON.stringify(schedules));
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
+}
+
+function loadSavedAlertSetting() {
+  try {
+    if (typeof localStorage === "undefined") return "10분 전";
+    return localStorage.getItem("hakwonDefaultAlert") || "10분 전";
+  } catch {
+    return "10분 전";
+  }
+}
+
+function saveAlertSettingToStorage(alertTime) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonDefaultAlert", alertTime);
     }
   } catch {
     // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
@@ -439,6 +467,15 @@ function runSelfTests() {
   console.assert("01088337590".startsWith("010"), "Dad phone number should be available for tel links");
   console.assert("01027460913".startsWith("010"), "Mom phone number should be available for tel links");
   console.assert(statusStyle["귀가 완료"].includes("emerald"), "Home arrival status should have a visible style");
+  console.assert(statusStyle["위치 확인"].includes("cyan"), "Location check status should have a visible style");
+  const remainingSample = [
+    { id: 201, childId: "a", day: "월", start: "09:00", end: "10:00", status: "끝남" },
+    { id: 202, childId: "a", day: "월", start: "15:00", end: "16:00", status: "대기" },
+  ];
+  console.assert(
+    getNextRemainingSchedule(remainingSample, 14 * 60)?.id === 202,
+    "getNextRemainingSchedule should return the next future unfinished schedule"
+  );
 }
 
 if (typeof window !== "undefined" && !window.__HAKWON_SELF_TESTED__) {
@@ -452,6 +489,7 @@ export default function App() {
   const [schedules, setSchedules] = useState(loadSavedSchedules);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedDay, setSelectedDay] = useState(getTodayKoreanDay());
+  const [defaultAlertTime, setDefaultAlertTime] = useState(loadSavedAlertSetting);
   const emptyScheduleForm = {
     title: "",
     place: "",
@@ -460,7 +498,7 @@ export default function App() {
     end: "",
     transport: "",
     items: "",
-    alert: "10분 전",
+    alert: defaultAlertTime,
   };
   const [newSchedule, setNewSchedule] = useState(emptyScheduleForm);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
@@ -470,6 +508,7 @@ export default function App() {
   );
   const [sentAlertIds, setSentAlertIds] = useState([]);
   const [appAlerts, setAppAlerts] = useState([]);
+  const [locationChecks, setLocationChecks] = useState({});
   const [nowTick, setNowTick] = useState(Date.now());
   const [copyMessage, setCopyMessage] = useState("");
   const [activeMenu, setActiveMenu] = useState("home");
@@ -482,6 +521,10 @@ export default function App() {
   useEffect(() => {
     saveSchedulesToStorage(schedules);
   }, [schedules]);
+
+  useEffect(() => {
+    saveAlertSettingToStorage(defaultAlertTime);
+  }, [defaultAlertTime]);
 
   const child = children.find((c) => c.id === selectedChild);
   const current = useMemo(
@@ -595,6 +638,20 @@ export default function App() {
     setSchedules((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
   };
 
+  const saveLocationCheck = (scheduleId, locationData) => {
+    setLocationChecks((prev) => ({ ...prev, [scheduleId]: locationData }));
+    updateStatus(scheduleId, "위치 확인");
+    setAppAlerts((prev) => [
+      {
+        id: `location-${scheduleId}-${Date.now()}`,
+        title: "위치가 확인됐어요",
+        body: `${locationData.time} · 정확도 약 ${locationData.accuracy}m`,
+        time: locationData.time,
+      },
+      ...prev,
+    ].slice(0, 5));
+  }; 
+
   const requestDeleteSchedule = (schedule) => setDeleteTarget(schedule);
   const cancelDeleteSchedule = () => setDeleteTarget(null);
 
@@ -656,6 +713,21 @@ export default function App() {
     setNewSchedule((prev) => ({ ...prev, [field]: value }));
   };
 
+  const changeDefaultAlertTime = (value) => {
+    setDefaultAlertTime(value);
+    setNewSchedule((prev) => ({ ...prev, alert: value }));
+    setSchedules((prev) => prev.map((s) => ({ ...s, alert: value })));
+    setAppAlerts((prev) => [
+      {
+        id: `alert-setting-${Date.now()}`,
+        title: "알림 시간이 변경됐어요",
+        body: `모든 일정 알림이 ${value}으로 설정되었습니다.`,
+        time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+      },
+      ...prev,
+    ].slice(0, 5));
+  };
+
   const copyAppLink = async () => {
     const currentUrl = typeof window !== "undefined" ? window.location.href : "";
     const copied = await safeCopyText(currentUrl);
@@ -682,40 +754,59 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-sky-50 text-slate-900">
-      <div className="mx-auto max-w-md px-4 py-5">
-        <header className="mb-5">
-          <div className="mb-4">
-            <p className="text-sm font-medium text-emerald-700">초등학생 동선 알림앱</p>
-            <h1 className="text-3xl font-black tracking-tight">학원 안가니?</h1>
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-rose-50 via-orange-50 to-amber-50 text-slate-900">
+      <div className="pointer-events-none absolute -top-12 -left-10 h-44 w-44 rounded-full bg-rose-200/30 blur-3xl" />
+      <div className="pointer-events-none absolute top-36 -right-16 h-52 w-52 rounded-full bg-amber-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-24 left-8 h-36 w-36 rounded-full bg-pink-200/25 blur-3xl" />
+      <div className="pointer-events-none absolute right-7 top-28 text-5xl opacity-[0.06]">💗</div>
+      <div className="pointer-events-none absolute left-6 top-[430px] text-4xl opacity-[0.05]">🏠</div>
+      <div className="pointer-events-none absolute bottom-10 right-10 text-5xl opacity-[0.05]">🎒</div>
+      <div className="relative z-10 mx-auto max-w-md px-3 py-3">
+        <header className="mb-3 flex items-start justify-between gap-2 rounded-3xl bg-white/70 p-3 shadow-sm backdrop-blur">
+          <div>
+            <p className="text-xs font-bold text-rose-400">초등학생 동선 알림앱</p>
+            <h1 className="flex items-center text-2xl font-black tracking-tight text-slate-900">
+              <span className="relative mr-2 inline-flex h-9 w-8 items-end justify-center text-3xl leading-none">
+                <span className="absolute -top-1 left-0 text-[10px] leading-none">💗</span>
+                <span className="absolute -top-2 right-0 text-[10px] leading-none">💗</span>
+                <span>👩</span>
+              </span>
+              학원 안가니?
+              <span className="relative ml-2 inline-flex h-9 w-8 items-end justify-center text-3xl leading-none">
+                <span className="absolute -top-1 left-0 text-[10px] leading-none">💙</span>
+                <span className="absolute -top-2 right-0 text-[10px] leading-none">💙</span>
+                <span>👨</span>
+              </span>
+            </h1>
           </div>
-          <div className="grid grid-cols-2 rounded-3xl border border-slate-100 bg-white p-1 shadow-sm">
+
+          <div className="mt-1 grid shrink-0 grid-cols-2 rounded-2xl border border-rose-100 bg-white p-0.5 shadow-sm">
             <button
               onClick={() => setRole("child")}
-              className={`rounded-2xl py-3 text-sm font-black transition ${
-                role === "child" ? "bg-emerald-600 text-white shadow" : "text-slate-500"
+              className={`rounded-xl px-2 py-1 text-[10px] font-black transition ${
+                role === "child" ? "bg-rose-400 text-white shadow" : "text-slate-500"
               }`}
             >
-              아이용 화면
+              아이용
             </button>
             <button
               onClick={() => setRole("parent")}
-              className={`rounded-2xl py-3 text-sm font-black transition ${
-                role === "parent" ? "bg-emerald-600 text-white shadow" : "text-slate-500"
+              className={`rounded-xl px-2 py-1 text-[10px] font-black transition ${
+                role === "parent" ? "bg-rose-400 text-white shadow" : "text-slate-500"
               }`}
             >
-              부모용 화면
+              부모용
             </button>
           </div>
         </header>
 
-        <div className="mb-4 grid grid-cols-2 gap-2">
+        <div className="mb-2 grid grid-cols-2 gap-2">
           {children.map((c) => (
             <button
               key={c.id}
               onClick={() => setSelectedChild(c.id)}
               className={`rounded-2xl border p-3 text-left shadow-sm transition ${
-                selectedChild === c.id ? "border-emerald-400 bg-emerald-100" : "border-slate-200 bg-white"
+                selectedChild === c.id ? "border-rose-300 bg-rose-100" : "border-rose-100 bg-white/80"
               }`}
             >
               <div className="flex items-center gap-2">
@@ -727,13 +818,13 @@ export default function App() {
           ))}
         </div>
 
-        <div className="mb-4 grid grid-cols-7 gap-1">
+        <div className="mb-2 grid grid-cols-7 gap-1">
           {days.map((day) => (
             <button
               key={day}
               onClick={() => setSelectedDay(day)}
               className={`rounded-2xl py-2 text-sm font-black transition ${
-                selectedDay === day ? "bg-emerald-600 text-white shadow" : "border border-slate-100 bg-white text-slate-500"
+                selectedDay === day ? "bg-rose-400 text-white shadow" : "border border-rose-100 bg-white/80 text-slate-500"
               }`}
             >
               {day}
@@ -745,7 +836,15 @@ export default function App() {
 
         {activeMenu === "home" &&
           (role === "child" ? (
-            <ChildView child={child} current={current} selectedDay={selectedDay} updateStatus={updateStatus} />
+            <ChildView
+              child={child}
+              current={current}
+              selectedDay={selectedDay}
+              updateStatus={updateStatus}
+              schedules={todaySchedules}
+              locationChecks={locationChecks}
+              saveLocationCheck={saveLocationCheck}
+            />
           ) : (
             <ParentView
               child={child}
@@ -764,6 +863,7 @@ export default function App() {
               deleteTarget={deleteTarget}
               cancelDeleteSchedule={cancelDeleteSchedule}
               confirmDeleteSchedule={confirmDeleteSchedule}
+              locationChecks={locationChecks}
             />
           ))}
 
@@ -779,7 +879,15 @@ export default function App() {
           />
         )}
 
-        {activeMenu === "settings" && <WebAppGuidePanel onCopy={copyAppLink} onShare={shareApp} copyMessage={copyMessage} />}
+        {activeMenu === "settings" && (
+          <WebAppGuidePanel
+            onCopy={copyAppLink}
+            onShare={shareApp}
+            copyMessage={copyMessage}
+            defaultAlertTime={defaultAlertTime}
+            onDefaultAlertTimeChange={changeDefaultAlertTime}
+          />
+        )}
       </div>
     </div>
   );
@@ -793,13 +901,13 @@ function MainMenu({ activeMenu, setActiveMenu }) {
   ];
 
   return (
-    <div className="mb-4 grid grid-cols-3 rounded-3xl border border-slate-100 bg-white p-1 shadow-sm">
+    <div className="mb-2 grid grid-cols-3 rounded-3xl border border-rose-100 bg-white/80 p-1 shadow-sm">
       {menus.map((menu) => (
         <button
           key={menu.id}
           onClick={() => setActiveMenu(menu.id)}
           className={`flex items-center justify-center gap-1 rounded-2xl py-3 text-sm font-black transition ${
-            activeMenu === menu.id ? "bg-slate-900 text-white shadow" : "text-slate-500"
+            activeMenu === menu.id ? "bg-rose-400 text-white shadow" : "text-slate-500"
           }`}
         >
           {menu.icon}
@@ -810,7 +918,7 @@ function MainMenu({ activeMenu, setActiveMenu }) {
   );
 }
 
-function WebAppGuidePanel({ onCopy, onShare, copyMessage }) {
+function WebAppGuidePanel({ onCopy, onShare, copyMessage, defaultAlertTime, onDefaultAlertTimeChange }) {
   const [selectedSetting, setSelectedSetting] = useState(null);
 
   const settingItems = [
@@ -826,7 +934,7 @@ function WebAppGuidePanel({ onCopy, onShare, copyMessage }) {
       title: "알림설정",
       desc: "일정 알림과 테스트 알림을 관리합니다.",
       icon: <SlidersHorizontal size={20} />,
-      detail: "일정별 5분 전, 10분 전, 15분 전, 20분 전, 30분 전 알림을 설정할 수 있습니다.",
+      detail: "알림 시간을 선택하면 모든 일정에 바로 반영됩니다.",
     },
     {
       id: "logout",
@@ -877,7 +985,27 @@ function WebAppGuidePanel({ onCopy, onShare, copyMessage }) {
 
               {selectedSetting === item.id && (
                 <div className="mt-2 rounded-2xl border border-slate-100 bg-white p-3 text-sm text-slate-600">
-                  {item.detail}
+                  {item.id === "alarm" ? (
+                    <div className="space-y-3">
+                      <p>{item.detail}</p>
+                      <select
+                        value={defaultAlertTime}
+                        onChange={(e) => onDefaultAlertTimeChange(e.target.value)}
+                        className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-emerald-400"
+                      >
+                        <option>5분 전</option>
+                        <option>10분 전</option>
+                        <option>15분 전</option>
+                        <option>20분 전</option>
+                        <option>30분 전</option>
+                      </select>
+                      <p className="rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">
+                        현재 기본 알림: {defaultAlertTime}
+                      </p>
+                    </div>
+                  ) : (
+                    item.detail
+                  )}
                 </div>
               )}
             </div>
@@ -898,11 +1026,49 @@ function WebAppGuidePanel({ onCopy, onShare, copyMessage }) {
   );
 }
 
-function ChildView({ child, current, selectedDay, updateStatus }) {
+function ChildView({ child, current, selectedDay, updateStatus, schedules, locationChecks, saveLocationCheck }) {
   const [showContactOptions, setShowContactOptions] = useState(false);
+  const [locationMessage, setLocationMessage] = useState("");
+  const [isCheckingLocation, setIsCheckingLocation] = useState(false);
   const dadPhone = "01088337590";
   const momPhone = "01027460913";
   const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
+  const nextSchedule = getNextRemainingSchedule(schedules, getNowMinutes(), current?.id);
+  const currentLocationCheck = current ? locationChecks?.[current.id] : null;
+
+  const checkCurrentLocation = () => {
+    if (!current) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationMessage("이 브라우저에서는 위치 확인을 지원하지 않아요.");
+      return;
+    }
+
+    setIsCheckingLocation(true);
+    setLocationMessage("현재 위치를 확인하는 중이에요...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const locationData = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: Math.round(position.coords.accuracy || 0),
+          time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+        };
+        saveLocationCheck(current.id, locationData);
+        setLocationMessage("위치 확인이 완료됐어요.");
+        setIsCheckingLocation(false);
+      },
+      () => {
+        setLocationMessage("위치 권한이 거부되었거나 위치를 확인할 수 없어요.");
+        setIsCheckingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  }; 
 
   if (!current) {
     return (
@@ -925,45 +1091,83 @@ function ChildView({ child, current, selectedDay, updateStatus }) {
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-      <Card className="overflow-hidden rounded-3xl border-0 bg-white shadow-lg">
-        <CardContent className="p-5">
-          <div className="mb-4 flex items-center justify-between">
+      <Card className="overflow-hidden rounded-[2rem] border border-rose-100 bg-white/90 shadow-lg shadow-rose-100/70">
+        <CardContent className="p-4">
+          <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500">{child.name}이가 지금 할 일</p>
-              <h2 className="mt-1 text-3xl font-black text-emerald-700">{current.title}</h2>
+              <p className="text-xs font-bold text-slate-400">{child.name}이가 지금 할 일</p>
+              <h2 className="mt-1 text-3xl font-black text-rose-500">{current.title}</h2>
             </div>
-            <div className="rounded-full bg-emerald-100 p-3 text-emerald-700">
+            <button
+              type="button"
+              onClick={checkCurrentLocation}
+              disabled={isCheckingLocation}
+              className="rounded-full bg-rose-100 p-3 text-rose-500 transition hover:bg-rose-200 disabled:opacity-60"
+              title="위치 확인"
+            >
               <Navigation size={28} />
-            </div>
+            </button>
           </div>
 
-          <div className="mb-4 rounded-2xl bg-emerald-50 p-4">
-            <div className="mb-2 flex items-center gap-2 text-lg font-bold">
+          <div className="mb-3 rounded-3xl bg-rose-50 p-3">
+            <div className="mb-1 flex items-center gap-2 text-base font-black">
               <MapPin size={20} />
               {current.place}
             </div>
-            <p className="text-sm text-slate-600">{current.address}</p>
+            <p className="text-xs text-slate-500">{current.address}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <InfoBox icon={<Clock size={18} />} label="시간" value={`${current.start} ~ ${current.end}`} />
-            <InfoBox icon={<Bell size={18} />} label="알림" value={current.alert} />
-            <InfoBox icon={<Home size={18} />} label="이동" value={current.transport} />
-            <InfoBox icon={<CalendarDays size={18} />} label="준비물" value={current.items} />
+          <div className="grid grid-cols-2 gap-1.5 text-sm">
+            <InfoBox compact icon={<Clock size={16} />} label="시간" value={`${current.start} ~ ${current.end}`} />
+            <InfoBox compact icon={<Bell size={16} />} label="알림" value={current.alert} />
+            <InfoBox compact icon={<Home size={16} />} label="이동" value={current.transport} />
+            <InfoBox compact icon={<CalendarDays size={16} />} label="준비물" value={current.items} />
+          </div>
+
+          {(locationMessage || currentLocationCheck) && (
+            <div className="mt-3 rounded-2xl border border-cyan-100 bg-cyan-50 p-3 text-sm text-cyan-800">
+              <p className="font-bold">{locationMessage || "위치 확인 완료"}</p>
+              {currentLocationCheck && (
+                <p className="mt-1 text-xs leading-5 text-cyan-700">
+                  확인 시간: {currentLocationCheck.time} · 정확도 약 {currentLocationCheck.accuracy}m
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-2 rounded-3xl bg-pink-50 p-3 text-pink-900">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-pink-500">다음에 할 일</p>
+                {nextSchedule ? (
+                  <p className="mt-1 text-lg font-black text-pink-900">{nextSchedule.title}</p>
+                ) : (
+                  <p className="mt-1 text-lg font-black text-pink-300">없음</p>
+                )}
+              </div>
+              {nextSchedule ? (
+                <div className="text-right">
+                  <p className="text-sm font-black text-pink-900">{nextSchedule.start}</p>
+                  <p className="mt-1 max-w-[120px] truncate text-xs text-pink-500">{nextSchedule.place}</p>
+                </div>
+              ) : (
+                <p className="text-right text-xs text-pink-400">오늘 남은 일정이 없어요</p>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <Button className="h-16 rounded-3xl text-lg font-black" onClick={() => updateStatus(current.id, "도착 완료")}>
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <Button className="h-12 rounded-3xl text-base font-black" onClick={() => updateStatus(current.id, "도착 완료")}>
             <CheckCircle2 className="mr-2" /> 도착했어요
           </Button>
-          <Button variant="secondary" className="h-16 rounded-3xl text-lg font-black" onClick={() => updateStatus(current.id, "끝남")}>
+          <Button variant="secondary" className="h-12 rounded-3xl text-base font-black" onClick={() => updateStatus(current.id, "끝남")}>
             끝났어요
           </Button>
         </div>
-        <Button className="h-16 w-full rounded-3xl bg-emerald-700 text-lg font-black hover:bg-emerald-800" onClick={() => updateStatus(current.id, "귀가 완료")}>
+        <Button className="h-12 w-full rounded-3xl bg-rose-500 text-base font-black hover:bg-rose-600" onClick={() => updateStatus(current.id, "귀가 완료")}>
           <Home className="mr-2" size={22} /> 집에 왔어요
         </Button>
       </div>
@@ -971,7 +1175,7 @@ function ChildView({ child, current, selectedDay, updateStatus }) {
       <div className="space-y-2">
         <Button
           variant="outline"
-          className="h-14 w-full rounded-3xl text-base font-bold"
+          className="h-11 w-full rounded-3xl text-sm font-bold"
           onClick={() => setShowContactOptions((prev) => !prev)}
         >
           <Phone className="mr-2" size={20} /> 부모님께 연락하기
@@ -1010,15 +1214,7 @@ function ChildView({ child, current, selectedDay, updateStatus }) {
         )}
       </div>
 
-      <Card className="rounded-3xl border-orange-100 bg-orange-50 shadow-sm">
-        <CardContent className="flex gap-3 p-4">
-          <AlertTriangle className="mt-1 text-orange-600" size={22} />
-          <div>
-            <p className="font-bold text-orange-800">화면 알림 예시</p>
-            <p className="text-sm text-orange-700">10분 뒤 {current.title} 가야 해요. 장소는 {current.place}입니다.</p>
-          </div>
-        </CardContent>
-      </Card>
+      
     </motion.div>
   );
 }
@@ -1040,6 +1236,7 @@ function ParentView({
   deleteTarget,
   cancelDeleteSchedule,
   confirmDeleteSchedule,
+  locationChecks,
 }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
@@ -1197,9 +1394,14 @@ function ParentView({
                 <p className="mb-1 flex items-center gap-1 text-sm text-slate-700">
                   <MapPin size={15} /> {s.place}
                 </p>
-                <p className="mb-3 text-sm text-slate-500">
+                <p className="mb-2 text-sm text-slate-500">
                   이동: {s.transport} · 준비물: {s.items}
                 </p>
+                {locationChecks?.[s.id] && (
+                  <p className="mb-3 rounded-2xl bg-cyan-50 p-2 text-xs font-bold text-cyan-700">
+                    위치 확인: {locationChecks[s.id].time} · 정확도 약 {locationChecks[s.id].accuracy}m
+                  </p>
+                )}
                 <div className="mb-2 grid grid-cols-3 gap-2">
                   <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => startEditSchedule(s)}>
                     <Pencil size={14} className="mr-1" /> 수정
@@ -1348,14 +1550,14 @@ function NotificationPanel({ activeAlerts, appAlerts, permission, onRequestPermi
   );
 }
 
-function InfoBox({ icon, label, value }) {
+function InfoBox({ icon, label, value, compact = false }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-3">
-      <div className="mb-1 flex items-center gap-1 text-slate-500">
+    <div className={`rounded-2xl bg-orange-50/70 ${compact ? "p-2" : "p-3"}`}>
+      <div className="mb-0.5 flex items-center gap-1 text-slate-400">
         {icon}
-        <span className="text-xs font-bold">{label}</span>
+        <span className="text-[10px] font-bold">{label}</span>
       </div>
-      <p className="break-keep font-bold">{value}</p>
+      <p className={`break-keep font-black text-slate-800 ${compact ? "text-[13px]" : "text-base"}`}>{value}</p>
     </div>
   );
 }
