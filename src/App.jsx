@@ -803,6 +803,26 @@ function loadSavedHomework() {
   }
 }
 
+function loadSavedHomeworkPoints() {
+  try {
+    if (typeof localStorage === "undefined") return { points: {}, awardedKeys: [] };
+    const saved = localStorage.getItem("hakwonHomeworkPoints");
+    return saved ? JSON.parse(saved) : { points: {}, awardedKeys: [] };
+  } catch {
+    return { points: {}, awardedKeys: [] };
+  }
+}
+
+function saveHomeworkPointsToStorage(homeworkPoints) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonHomeworkPoints", JSON.stringify(homeworkPoints));
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
+}
+
 function loadSavedNotices() {
   try {
     if (typeof localStorage === "undefined") return [];
@@ -1024,6 +1044,7 @@ export default function App() {
   const [familyShareCode, setFamilyShareCode] = useState(loadSavedFamilyShareCode);
   const [familyCodeInput, setFamilyCodeInput] = useState(loadSavedFamilyShareCode);
   const [homework, setHomework] = useState(loadSavedHomework);
+  const [homeworkPoints, setHomeworkPoints] = useState(loadSavedHomeworkPoints);
   const [newHomeworkText, setNewHomeworkText] = useState("");
   const [notices, setNotices] = useState(loadSavedNotices);
   const [newNotice, setNewNotice] = useState({ title: "", body: "" });
@@ -1073,6 +1094,10 @@ export default function App() {
   }, [homework]);
 
   useEffect(() => {
+    saveHomeworkPointsToStorage(homeworkPoints);
+  }, [homeworkPoints]);
+
+  useEffect(() => {
     saveNoticesToStorage(notices);
   }, [notices]);
 
@@ -1092,6 +1117,7 @@ export default function App() {
         if (data?.parentSecurity) setParentSecurity(data.parentSecurity);
         if (data?.familyInfo) setFamilyInfo(data.familyInfo);
         if (data?.homework) setHomework(data.homework);
+        if (data?.homeworkPoints) setHomeworkPoints(data.homeworkPoints);
         if (data?.notices) setNotices(data.notices);
         setSyncStatus("가족 공유 중");
       } catch {
@@ -1115,7 +1141,7 @@ export default function App() {
 
     const timer = setTimeout(async () => {
       try {
-        await saveCloudFamilyData({ schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, notices, familyShareCode }, familyShareCode);
+        await saveCloudFamilyData({ schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, homeworkPoints, notices, familyShareCode }, familyShareCode);
         setSyncStatus("가족 공유 중");
       } catch {
         setSyncStatus("공유 저장 실패 · 다시 시도 필요");
@@ -1123,7 +1149,7 @@ export default function App() {
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, notices, familyShareCode, cloudLoaded]);
+  }, [schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, homeworkPoints, notices, familyShareCode, cloudLoaded]);
 
   const applyFamilyShareCode = () => {
     const normalized = normalizeFamilyCode(familyCodeInput) || DEFAULT_FAMILY_SHARE_CODE;
@@ -1199,6 +1225,7 @@ export default function App() {
         id: Date.now(),
         childId: selectedChild,
         day: selectedDay,
+        dateKey: selectedDateKey,
         text,
         done: false,
         createdAt: new Date().toISOString(),
@@ -1286,10 +1313,36 @@ export default function App() {
     [schedules, selectedChild, nowTick]
   );
   const todayHomework = useMemo(
-    () => homework.filter((item) => item.childId === selectedChild && item.day === selectedDay),
-    [homework, selectedChild, selectedDay]
+    () => homework.filter((item) => item.childId === selectedChild && item.day === selectedDay && (!item.dateKey || item.dateKey === selectedDateKey)),
+    [homework, selectedChild, selectedDay, selectedDateKey]
   );
   const todayDateLabel = useMemo(() => getTodayDateLabel(selectedDate), [selectedDate]);
+
+  useEffect(() => {
+    const awardKey = `${selectedChild}-${selectedDateKey}`;
+    const alreadyAwarded = homeworkPoints.awardedKeys?.includes(awardKey);
+    const canAward = todayHomework.length > 0 && todayHomework.every((item) => item.done) && !alreadyAwarded;
+
+    if (!canAward) return;
+
+    setHomeworkPoints((prev) => ({
+      points: {
+        ...(prev.points || {}),
+        [selectedChild]: (prev.points?.[selectedChild] || 0) + 10,
+      },
+      awardedKeys: [...(prev.awardedKeys || []), awardKey],
+    }));
+
+    setAppAlerts((prev) => [
+      {
+        id: `homework-point-${Date.now()}`,
+        title: "숙제 포인트 10점 획득!",
+        body: `${child.name} 오늘 숙제를 모두 완료했어요. 정말 잘했어요!`,
+        time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+      },
+      ...prev,
+    ].slice(0, 5));
+  }, [todayHomework, homeworkPoints.awardedKeys, selectedChild, selectedDateKey, child.name]);
   const weekDates = useMemo(() => {
     const monday = getMondayOfWeek(selectedDate);
     return days.map((day, index) => ({ day, date: addDays(monday, index) }));
@@ -1589,8 +1642,8 @@ export default function App() {
       {urgentAlert && <UrgentAlertOverlay alert={urgentAlert} onClose={() => setUrgentAlert(null)} />}
       {statusConfirm && <StatusConfirmToast confirm={statusConfirm} onClose={() => setStatusConfirm(null)} />}
 
-      <div className="relative z-10 mx-auto max-w-md px-3 py-3">
-        <header className="mb-3 rounded-[2rem] border border-white/70 bg-white/75 p-4 shadow-[0_12px_35px_rgba(244,114,182,0.12)] backdrop-blur">
+      <div className="relative z-10 mx-auto max-w-md px-2.5 py-2">
+        <header className="mb-2 rounded-[1.6rem] border border-white/70 bg-white/75 p-3 shadow-[0_8px_24px_rgba(244,114,182,0.10)] backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50/80 px-3 py-1 text-[11px] font-black text-rose-500 shadow-sm" style={{ fontFamily: appFontFamily }}>
@@ -1601,7 +1654,7 @@ export default function App() {
                 <div className="absolute -left-1 -top-1 h-3 w-3 rounded-full bg-rose-300/45 blur-[1px]" />
                 <div className="absolute -right-2 bottom-1 h-2.5 w-2.5 rounded-full bg-amber-300/55 blur-[1px]" />
                 <h1
-                  className="relative text-[44px] font-black leading-none text-slate-950"
+                  className="relative text-[34px] font-black leading-none text-slate-950"
                   style={{
                     fontFamily: appFontFamily,
                     letterSpacing: "-0.045em",
@@ -1610,7 +1663,7 @@ export default function App() {
                 >
                   학원안가니?
                 </h1>
-                <div className="mt-2 h-1.5 w-24 rounded-full bg-gradient-to-r from-rose-400 via-pink-300 to-orange-200 shadow-sm" />
+                <div className="mt-1.5 h-1 w-20 rounded-full bg-gradient-to-r from-rose-400 via-pink-300 to-orange-200 shadow-sm" />
               </div>
             </div>
 
@@ -1646,7 +1699,7 @@ export default function App() {
         </div>
         </header>
 
-        <div className="mb-2 grid grid-cols-2 gap-2">
+        <div className="mb-1.5 grid grid-cols-2 gap-2">
           {appChildren.map((c) => {
             const isSelected = selectedChild === c.id;
 
@@ -1655,9 +1708,9 @@ export default function App() {
                 key={c.id}
                 type="button"
                 onClick={() => setSelectedChild(c.id)}
-                className={`relative overflow-hidden rounded-[24px] px-4 py-3 text-left transition-all duration-200 ${
+                className={`relative overflow-hidden rounded-[22px] px-3 py-2.5 text-center transition-all duration-200 ${
                   isSelected
-                    ? "border-2 border-rose-400 bg-gradient-to-r from-rose-50 via-pink-50 to-white shadow-[0_10px_28px_rgba(244,114,182,0.24)]"
+                    ? "border-2 border-rose-400 bg-gradient-to-r from-rose-50 via-pink-50 to-white shadow-[0_8px_24px_rgba(244,114,182,0.20)]"
                     : "border border-rose-100 bg-white/90 shadow-sm hover:border-rose-200 hover:bg-rose-50/40"
                 }`}
               >
@@ -1665,15 +1718,15 @@ export default function App() {
                   <span className="absolute bottom-0 left-0 h-1.5 w-full bg-gradient-to-r from-rose-400 via-pink-300 to-orange-200" />
                 )}
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center gap-3">
                   <ChildAvatar child={c} />
-                  <div className="flex flex-col" style={{ fontFamily: appFontFamily }}>
+                  <div className="flex flex-col items-start justify-center" style={{ fontFamily: appFontFamily }}>
                     <div className="flex items-baseline gap-2">
-                      <span className={`text-lg font-black ${isSelected ? "text-slate-950" : "text-slate-800"}`}>{c.name}</span>
-                      <span className={`text-xs font-bold ${isSelected ? "text-rose-500" : "text-slate-400"}`}>{c.grade}</span>
+                      <span className={`text-[18px] font-black leading-none ${isSelected ? "text-slate-950" : "text-slate-800"}`}>{c.name}</span>
+                      <span className={`text-[12px] font-bold ${isSelected ? "text-rose-500" : "text-slate-400"}`}>{c.grade}</span>
                     </div>
-                    <span className={`mt-1 text-xs font-bold ${isSelected ? "text-rose-500" : "text-slate-300"}`}>
-                      {isSelected ? "현재 선택됨" : "눌러서 일정 보기"}
+                    <span className={`mt-1 text-[10px] font-bold ${isSelected ? "text-rose-500" : "text-slate-300"}`}>
+                      {isSelected ? "선택됨" : "일정 보기"}
                     </span>
                   </div>
                 </div>
@@ -1692,7 +1745,7 @@ export default function App() {
           />
         )}
 
-        <div className="mb-2 grid grid-cols-7 gap-1">
+        <div className="mb-1.5 grid grid-cols-7 gap-1">
           {days.map((day) => (
             <button
               key={day}
@@ -1701,7 +1754,7 @@ export default function App() {
                 if (target) setSelectedDate(target);
                 setSelectedDay(day);
               }}
-              className={`rounded-2xl py-2 text-[12px] font-black transition ${
+              className={`rounded-2xl py-1.5 text-[11px] font-black transition ${
                 selectedDay === day ? "bg-rose-400 text-white shadow" : "border border-rose-100 bg-white/80 text-slate-500"
               }`}
             >
@@ -1783,6 +1836,8 @@ export default function App() {
             toggleHomework={toggleHomework}
             deleteHomework={deleteHomework}
             role={role}
+            homeworkPoints={homeworkPoints.points?.[selectedChild] || 0}
+            pointAwardedToday={homeworkPoints.awardedKeys?.includes(`${selectedChild}-${selectedDateKey}`)}
           />
         )}
 
@@ -1897,7 +1952,7 @@ function ChildAvatar({ child }) {
   const cheek = isDonghun ? "#FDA4AF" : "#FDBA74";
 
   return (
-    <div className="h-12 w-12 overflow-hidden rounded-full bg-white shadow-sm ring-2 ring-white">
+    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-white shadow-sm ring-2 ring-rose-100">
       <svg viewBox="0 0 96 96" className="h-full w-full" role="img" aria-label={`${child.name} 아바타`}>
         <defs>
           <linearGradient id={`avatar-bg-${child.id}`} x1="0" y1="0" x2="1" y2="1">
@@ -1953,10 +2008,15 @@ function TodayDateBadge({ todayDateLabel, onClick }) {
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center gap-1 rounded-2xl border border-rose-100 bg-white/80 px-4 py-2 text-[12px] font-black text-rose-400 shadow-sm transition hover:bg-rose-50"
+        className="group flex w-full max-w-[300px] items-center justify-center gap-2 rounded-[1.4rem] border-2 border-rose-200 bg-white px-4 py-2.5 text-[13px] font-black text-rose-500 shadow-[0_8px_22px_rgba(244,114,182,0.18)] transition hover:border-rose-300 hover:bg-rose-50"
       >
-        <CalendarDays size={15} />
-        {todayDateLabel}
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-500 transition group-hover:bg-rose-200">
+          <CalendarDays size={17} />
+        </span>
+        <span className="truncate">{todayDateLabel}</span>
+        <span className="shrink-0 rounded-full bg-rose-400 px-2 py-1 text-[10px] font-black text-white shadow-sm">
+          달력
+        </span>
       </button>
     </div>
   );
@@ -2115,12 +2175,12 @@ function MainMenu({ activeMenu, setActiveMenu }) {
   ];
 
   return (
-    <div className="mb-2 grid grid-cols-4 rounded-3xl border border-rose-100 bg-white/80 p-1 shadow-sm">
+    <div className="mb-1.5 grid grid-cols-4 rounded-3xl border border-rose-100 bg-white/80 p-1 shadow-sm">
       {menus.map((menu) => (
         <button
           key={menu.id}
           onClick={() => setActiveMenu(menu.id)}
-          className={`flex items-center justify-center gap-1 rounded-2xl py-3 text-[12px] font-black transition ${
+          className={`flex items-center justify-center gap-1 rounded-2xl py-2 text-[11px] font-black transition ${
             activeMenu === menu.id ? "bg-rose-400 text-white shadow" : "text-slate-500"
           }`}
         >
@@ -2142,6 +2202,8 @@ function HomeworkPanel({
   toggleHomework,
   deleteHomework,
   role,
+  homeworkPoints,
+  pointAwardedToday,
 }) {
   const doneCount = homework.filter((item) => item.done).length;
   const totalCount = homework.length;
@@ -2160,9 +2222,15 @@ function HomeworkPanel({
                 생각난 숙제를 바로 적고, 끝나면 체크해요.
               </p>
             </div>
-            <div className="rounded-full bg-rose-50 px-3 py-2 text-center text-xs font-black text-rose-500">
-              {doneCount}/{totalCount}
-              <br />완료
+            <div className="flex shrink-0 gap-2">
+              <div className="rounded-full bg-amber-50 px-3 py-2 text-center text-xs font-black text-amber-600">
+                ⭐ {homeworkPoints}
+                <br />포인트
+              </div>
+              <div className="rounded-full bg-rose-50 px-3 py-2 text-center text-xs font-black text-rose-500">
+                {doneCount}/{totalCount}
+                <br />완료
+              </div>
             </div>
           </div>
 
@@ -2231,9 +2299,11 @@ function HomeworkPanel({
           )}
 
           <div className="mt-3 rounded-3xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-500">
-            {role === "child"
-              ? "하나씩 해내다 보면 오늘 숙제도 스스로 끝낼 수 있어요."
-              : "아이가 스스로 적고 체크한 숙제를 함께 응원해주세요."}
+            {pointAwardedToday
+              ? "오늘 숙제를 모두 완료해서 포인트 10점을 받았어요!"
+              : role === "child"
+                ? "오늘 숙제를 모두 체크하면 포인트 10점을 받을 수 있어요."
+                : "아이가 오늘 숙제를 모두 완료하면 포인트 10점이 쌓입니다."}
           </div>
         </CardContent>
       </Card>
@@ -2667,21 +2737,39 @@ function ChildView({
   }; 
 
   if (!current) {
+    const selfTasks = [
+      { icon: "✏️", title: "숙제 먼저 확인하기", desc: "오늘 해야 할 숙제가 있는지 살펴봐요." },
+      { icon: "🎒", title: "가방 정리하기", desc: "내일 필요한 책과 준비물을 챙겨요." },
+      { icon: "📖", title: "10분 독서하기", desc: "짧게라도 책을 읽어보면 좋아요." },
+    ];
 
     return (
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+        <Card className="rounded-[1.7rem] border border-rose-100 bg-white/90 shadow-sm">
+          <CardContent className="p-4">
+            <div className="mb-3 text-center">
+              <p className="text-xs font-bold text-rose-400">{child.name} · {selectedDay}요일</p>
+              <h2 className="mt-1 text-xl font-black text-slate-900">오늘은 학원 일정이 없어요</h2>
+              <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-400">
+                스스로 할 일을 하나 골라보면 더 멋진 하루가 돼요.
+              </p>
+            </div>
 
-        <ChildScheduleAddBox
-          showAdd={showAdd}
-          setShowAdd={setShowAdd}
-          newSchedule={newSchedule}
-          updateNewSchedule={updateNewSchedule}
-          addSchedule={addSchedule}
-          cancelScheduleForm={cancelScheduleForm}
-          selectedDateLabel={selectedDateLabel}
-          child={child}
-          selectedDay={selectedDay}
-        />
+            <div className="space-y-2">
+              {selfTasks.map((task) => (
+                <div key={task.title} className="flex items-center gap-3 rounded-2xl bg-rose-50/70 p-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm">
+                    {task.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-slate-900">{task.title}</p>
+                    <p className="mt-0.5 break-keep text-xs font-bold leading-4 text-slate-400">{task.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
     );
   }
@@ -2691,35 +2779,34 @@ function ChildView({
 
       <Card className="overflow-hidden rounded-[2rem] border border-rose-100 bg-white/90 shadow-lg shadow-rose-100/70">
         <CardContent className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-slate-400">지금 보고 있는 아이</p>
-              <div className="mt-1 inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-sm font-black text-rose-600">
-                {child.name} · {child.grade}
+          <div className="mb-3 rounded-[1.6rem] bg-gradient-to-br from-rose-50 via-pink-50 to-white p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-400">지금 보고 있는 아이</p>
+                <div className="mt-1 inline-flex items-center rounded-full bg-white px-2.5 py-1 text-xs font-black text-rose-600 shadow-sm">
+                  {child.name} · {child.grade}
+                </div>
               </div>
-              <h2 className="mt-2 text-3xl font-black text-rose-500">{current.title}</h2>
+              <span className="shrink-0 rounded-full bg-rose-500 px-3 py-1.5 text-xs font-black text-white shadow-sm">
+                지금 할 일
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={checkCurrentLocation}
-              disabled={isCheckingLocation}
-              className="rounded-full bg-rose-100 p-3 text-rose-500 transition hover:bg-rose-200 disabled:opacity-60"
-              title="위치 확인"
-            >
-              <Navigation size={28} />
-            </button>
-          </div>
 
-          <div className="mb-3 rounded-3xl bg-rose-50 p-3">
-            <div className="mb-1 flex items-center gap-2 text-base font-black">
-              <MapPin size={20} />
-              {current.place}
+            <h2 className="break-keep text-[28px] font-black leading-tight text-rose-500">{current.title}</h2>
+
+            <div className="mt-3 rounded-2xl bg-white/80 p-3 shadow-sm">
+              <div className="flex items-start gap-2">
+                <MapPin size={18} className="mt-0.5 shrink-0 text-rose-400" />
+                <div className="min-w-0">
+                  <p className="break-keep text-base font-black text-slate-900">{current.place}</p>
+                  <p className="mt-0.5 break-keep text-xs font-bold text-slate-400">장소를 확인하고 이동해요</p>
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-slate-500">{current.address}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-1.5 text-sm">
-            <InfoBox compact icon={<Clock size={16} />} label="시간" value={formatKoreanTimeRange(current.start, current.end)} />
+            <InfoBox compact icon={<Clock size={16} />} label="시간" value={formatKoreanTimeRange(current.start, current.end)} highlight />
             <InfoBox compact icon={<Bell size={16} />} label="알림" value={current.alert} />
             <InfoBox compact icon={<Home size={16} />} label="이동" value={current.transport} />
             <InfoBox compact icon={<CalendarDays size={16} />} label="준비물" value={current.items} />
@@ -2793,18 +2880,6 @@ function ChildView({
           <Home className="mr-2" size={22} /> 집에 왔어요
         </Button>
       </div>
-
-      <ChildScheduleAddBox
-        showAdd={showAdd}
-        setShowAdd={setShowAdd}
-        newSchedule={newSchedule}
-        updateNewSchedule={updateNewSchedule}
-        addSchedule={addSchedule}
-        cancelScheduleForm={cancelScheduleForm}
-        selectedDateLabel={selectedDateLabel}
-        child={child}
-        selectedDay={selectedDay}
-      />
 
       <div className="space-y-2">
         <Button
@@ -3733,14 +3808,14 @@ function NotificationPanel({
   );
 }
 
-function InfoBox({ icon, label, value, compact = false }) {
+function InfoBox({ icon, label, value, compact = false, highlight = false }) {
   return (
-    <div className={`rounded-2xl bg-orange-50/70 ${compact ? "p-2" : "p-3"}`}>
-      <div className="mb-0.5 flex items-center gap-1 text-slate-400">
+    <div className={`rounded-2xl ${highlight ? "border border-rose-100 bg-rose-50" : "bg-orange-50/70"} ${compact ? "p-2.5" : "p-3"}`}>
+      <div className={`mb-0.5 flex items-center gap-1 ${highlight ? "text-rose-400" : "text-slate-400"}`}>
         {icon}
         <span className="text-[10px] font-bold">{label}</span>
       </div>
-      <p className={`break-keep font-black text-slate-800 ${compact ? "text-[13px]" : "text-base"}`}>{value}</p>
+      <p className={`break-keep font-black ${highlight ? "text-rose-700" : "text-slate-800"} ${compact ? "text-[13px]" : "text-base"}`}>{value}</p>
     </div>
   );
 }
