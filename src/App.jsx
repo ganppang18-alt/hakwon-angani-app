@@ -404,6 +404,51 @@ function getDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function getMondayOfWeek(date = new Date()) {
+  const base = new Date(date);
+  const day = base.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  base.setDate(base.getDate() + diff);
+  base.setHours(0, 0, 0, 0);
+  return base;
+}
+
+function addDays(date, amount) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function isTomorrowDate(date) {
+  return getDateKey(date) === getDateKey(addDays(new Date(), 1));
+}
+
+function isTodayDate(date) {
+  return getDateKey(date) === getDateKey(new Date());
+}
+
+function isFutureDate(date) {
+  const target = new Date(date);
+  const today = new Date();
+  target.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return target.getTime() > today.getTime();
+}
+
+function getNoScheduleTitle(date) {
+  if (isTomorrowDate(date)) return "내일은 어떤 재밌는 일이 생길까요?";
+  if (isTodayDate(date)) return "오늘은 여유 시간이 있어요";
+  if (isFutureDate(date)) return "이날은 어떤 좋은 일이 기다릴까요?";
+  return "이날 일정은 모두 지나갔어요";
+}
+
+function getNoScheduleDescription(date) {
+  if (isTomorrowDate(date)) return "아직 일정이 없어도 괜찮아요. 내일의 즐거운 순간을 기대해봐요.";
+  if (isTodayDate(date)) return "학원 일정이 없는 날에는 스스로 할 일을 하나 골라보면 멋져요.";
+  if (isFutureDate(date)) return "새로운 하루를 위해 작은 계획을 떠올려보는 것도 좋아요.";
+  return "지난 일정은 홈 화면에서 숨기고, 오늘 할 일에 집중해요.";
+}
+
 function isScheduleForSelectedDate(schedule, selectedDay, selectedDateKey) {
   if (schedule.dateKey) return schedule.dateKey === selectedDateKey;
   return schedule.day === selectedDay;
@@ -1050,6 +1095,10 @@ export default function App() {
     [homework, selectedChild, selectedDay]
   );
   const todayDateLabel = useMemo(() => getTodayDateLabel(selectedDate), [selectedDate]);
+  const weekDates = useMemo(() => {
+    const monday = getMondayOfWeek(selectedDate);
+    return days.map((day, index) => ({ day, date: addDays(monday, index) }));
+  }, [selectedDate]);
 
   const selectCalendarDate = (date) => {
     setSelectedDate(date);
@@ -1437,7 +1486,11 @@ export default function App() {
           {days.map((day) => (
             <button
               key={day}
-              onClick={() => setSelectedDay(day)}
+              onClick={() => {
+                const target = weekDates.find((item) => item.day === day)?.date;
+                if (target) setSelectedDate(target);
+                setSelectedDay(day);
+              }}
               className={`rounded-2xl py-2 text-[12px] font-black transition ${
                 selectedDay === day ? "bg-rose-400 text-white shadow" : "border border-rose-100 bg-white/80 text-slate-500"
               }`}
@@ -1468,6 +1521,7 @@ export default function App() {
               addSchedule={addSchedule}
               cancelScheduleForm={cancelScheduleForm}
               selectedDateLabel={todayDateLabel}
+              selectedDate={selectedDate}
             />
           ) : isParentLockActive && !parentAuthenticated ? (
             <ParentLockScreen onUnlock={unlockParentMode} onBackToChild={() => setRole("child")} />
@@ -1491,6 +1545,7 @@ export default function App() {
               cancelDeleteSchedule={cancelDeleteSchedule}
               confirmDeleteSchedule={confirmDeleteSchedule}
               locationChecks={locationChecks}
+              selectedDate={selectedDate}
             />
           ))}
 
@@ -2323,6 +2378,7 @@ function ChildView({
   updateStatus,
   schedules,
   hadSchedulesToday,
+  selectedDate,
   locationChecks,
   saveLocationCheck,
   parentContacts,
@@ -2381,7 +2437,11 @@ function ChildView({
 
   if (!current) {
     const activityTips = getMeaningfulActivities(child.id, selectedDay);
-    const finishedToday = hadSchedulesToday;
+    const finishedToday = hadSchedulesToday && !isFutureDate(selectedDate);
+    const noScheduleTitle = finishedToday ? "오늘 일정은 모두 지나갔어요" : getNoScheduleTitle(selectedDate);
+    const noScheduleDescription = finishedToday
+      ? "지나간 일정은 홈 화면에서 숨기고, 남은 시간은 편안하게 정리해요."
+      : getNoScheduleDescription(selectedDate);
 
     return (
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
@@ -2394,12 +2454,10 @@ function ChildView({
               {child.name} · {selectedDay}요일
             </p>
             <h2 className="mt-2 text-2xl font-black text-slate-900">
-              {finishedToday ? "오늘 일정은 모두 지나갔어요" : "오늘은 여유 시간이 있어요"}
+              {noScheduleTitle}
             </h2>
             <p className="mt-2 break-keep text-sm leading-6 text-slate-500">
-              {finishedToday
-                ? "지나간 일정은 홈 화면에서 숨기고, 남은 시간은 편안하게 정리해요."
-                : "학원 일정이 없는 날에는 스스로 할 일을 하나 골라보면 멋져요."}
+              {noScheduleDescription}
             </p>
           </CardContent>
         </Card>
@@ -2712,6 +2770,7 @@ function ParentView({
   selectedDay,
   schedules,
   hadSchedulesToday,
+  selectedDate,
   updateStatus,
   showAdd,
   setShowAdd,
@@ -2862,7 +2921,7 @@ function ParentView({
 
           <div className="space-y-3">
             {schedules.length === 0 && (
-              <NoParentScheduleCard child={child} selectedDay={selectedDay} />
+              <NoParentScheduleCard child={child} selectedDay={selectedDay} selectedDate={selectedDate} hadSchedulesToday={hadSchedulesToday} />
             )}
             {schedules.map((s) => (
               <div key={s.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -2922,7 +2981,7 @@ function ParentView({
   );
 }
 
-function NoParentScheduleCard({ child, selectedDay }) {
+function NoParentScheduleCard({ child, selectedDay, selectedDate, hadSchedulesToday }) {
   const reminders = getParentFamilyReminders(child.id, selectedDay);
 
   return (
@@ -2981,7 +3040,13 @@ function NotificationPanel({
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [selectedInfoGuide, setSelectedInfoGuide] = useState(null);
   const [selectedNoticeId, setSelectedNoticeId] = useState(null);
+  const [showNoticeForm, setShowNoticeForm] = useState(false);
   const selectedNotice = notices.find((notice) => notice.id === selectedNoticeId) || null;
+
+  const handleAddNotice = () => {
+    addNotice();
+    setShowNoticeForm(false);
+  };
 
   const appNotificationLabel = notificationEnabled ? "앱 알림 ON" : "앱 알림 OFF";
 
@@ -3050,28 +3115,45 @@ function NotificationPanel({
         </div>
 
         {role === "parent" && (
-          <div className="mb-3 rounded-3xl border border-rose-100 bg-rose-50 p-3">
-            <p className="mb-2 text-sm font-black text-rose-600">부모님 공지 작성</p>
-            <input
-              value={newNotice.title}
-              onChange={(e) => setNewNotice((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="제목 예: 오늘은 영어 숙제 먼저 하기"
-              className="mb-2 w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
-            />
-            <textarea
-              value={newNotice.body}
-              onChange={(e) => setNewNotice((prev) => ({ ...prev, body: e.target.value }))}
-              placeholder="내용 예: 학원 다녀와서 물 마시고 10분 쉬었다가 숙제하자. 오늘도 잘하고 있어!"
-              rows={3}
-              className="w-full resize-none rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm leading-6 outline-none focus:border-rose-300"
-            />
+          <div className="mb-3">
             <Button
-              className="mt-2 h-11 w-full rounded-2xl"
-              onClick={addNotice}
-              disabled={!newNotice.title.trim() && !newNotice.body.trim()}
+              className="h-11 w-full rounded-2xl"
+              variant={showNoticeForm ? "secondary" : "default"}
+              onClick={() => setShowNoticeForm((prev) => !prev)}
             >
-              <Plus size={16} className="mr-1" /> 공지 등록
+              <Plus size={16} className="mr-1" /> {showNoticeForm ? "공지 작성 접기" : "공지 작성"}
             </Button>
+
+            {showNoticeForm && (
+              <div className="mt-2 rounded-3xl border border-rose-100 bg-rose-50 p-3">
+                <p className="mb-2 text-sm font-black text-rose-600">부모님 공지 작성</p>
+                <input
+                  value={newNotice.title}
+                  onChange={(e) => setNewNotice((prev) => ({ ...prev, title: e.target.value }))}
+                  placeholder="제목 예: 오늘은 영어 숙제 먼저 하기"
+                  className="mb-2 w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
+                />
+                <textarea
+                  value={newNotice.body}
+                  onChange={(e) => setNewNotice((prev) => ({ ...prev, body: e.target.value }))}
+                  placeholder="내용 예: 학원 다녀와서 물 마시고 10분 쉬었다가 숙제하자. 오늘도 잘하고 있어!"
+                  rows={3}
+                  className="w-full resize-none rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm leading-6 outline-none focus:border-rose-300"
+                />
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button variant="outline" className="h-11 rounded-2xl bg-white" onClick={() => setShowNoticeForm(false)}>
+                    취소
+                  </Button>
+                  <Button
+                    className="h-11 rounded-2xl"
+                    onClick={handleAddNotice}
+                    disabled={!newNotice.title.trim() && !newNotice.body.trim()}
+                  >
+                    공지 등록
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
