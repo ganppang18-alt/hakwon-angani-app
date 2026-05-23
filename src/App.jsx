@@ -1075,16 +1075,21 @@ export default function App() {
 
   const visibleSchedules = useMemo(() => {
     const nowMinutes = getNowMinutes(new Date(nowTick));
+
     return todaySchedules.filter((s) => {
       if (["끝남", "귀가 완료"].includes(s.status)) return false;
+      if (isFutureDate(selectedDate)) return true;
+      if (!isTodayDate(selectedDate)) return false;
       return timeToMinutes(s.end || s.start) >= nowMinutes;
     });
-  }, [todaySchedules, nowTick]);
+  }, [todaySchedules, nowTick, selectedDate]);
 
-  const current = useMemo(
-    () => getCurrentSchedule(visibleSchedules, selectedChild, selectedDay),
-    [visibleSchedules, selectedChild, selectedDay, nowTick]
-  );
+  const current = useMemo(() => {
+    if (isFutureDate(selectedDate)) {
+      return visibleSchedules[0] || null;
+    }
+    return getCurrentSchedule(visibleSchedules, selectedChild, selectedDay);
+  }, [visibleSchedules, selectedChild, selectedDay, selectedDate, nowTick]);
 
   const activeAlerts = useMemo(
     () => getActiveAlerts(visibleSchedules, selectedChild, selectedDay),
