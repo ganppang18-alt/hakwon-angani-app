@@ -1328,7 +1328,7 @@ export default function App() {
     setHomeworkPoints((prev) => ({
       points: {
         ...(prev.points || {}),
-        [selectedChild]: (prev.points?.[selectedChild] || 0) + 10,
+        [selectedChild]: (prev.points?.[selectedChild] || 0) + 100,
       },
       awardedKeys: [...(prev.awardedKeys || []), awardKey],
     }));
@@ -1336,7 +1336,7 @@ export default function App() {
     setAppAlerts((prev) => [
       {
         id: `homework-point-${Date.now()}`,
-        title: "숙제 포인트 10점 획득!",
+        title: "숙제 포인트 100점 획득!",
         body: `${child.name} 오늘 숙제를 모두 완료했어요. 정말 잘했어요!`,
         time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
       },
@@ -2300,10 +2300,10 @@ function HomeworkPanel({
 
           <div className="mt-3 rounded-3xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-500">
             {pointAwardedToday
-              ? "오늘 숙제를 모두 완료해서 포인트 10점을 받았어요!"
+              ? "오늘 숙제를 모두 완료해서 포인트 100점을 받았어요!"
               : role === "child"
-                ? "오늘 숙제를 모두 체크하면 포인트 10점을 받을 수 있어요."
-                : "아이가 오늘 숙제를 모두 완료하면 포인트 10점이 쌓입니다."}
+                ? "오늘 숙제를 모두 체크하면 포인트 100점을 받을 수 있어요."
+                : "아이가 오늘 숙제를 모두 완료하면 포인트 100점이 쌓입니다."}
           </div>
         </CardContent>
       </Card>
