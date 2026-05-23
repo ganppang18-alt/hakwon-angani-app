@@ -375,6 +375,23 @@ function timeToMinutes(time) {
   return h * 60 + m;
 }
 
+function formatKoreanTime(time) {
+  if (!time || !time.includes(":")) return time || "";
+  const [rawHour, rawMinute] = time.split(":").map(Number);
+  if (Number.isNaN(rawHour) || Number.isNaN(rawMinute)) return time;
+
+  const period = rawHour < 12 ? "오전" : "오후";
+  const displayHour = rawHour % 12 === 0 ? 12 : rawHour % 12;
+  const minute = String(rawMinute).padStart(2, "0");
+  return `${period}${displayHour}:${minute}`;
+}
+
+function formatKoreanTimeRange(start, end) {
+  if (!start && !end) return "";
+  if (!end || start === end) return formatKoreanTime(start);
+  return `${formatKoreanTime(start)} ~ ${formatKoreanTime(end)}`;
+}
+
 function alertToMinutes(alertText) {
   const numberOnly = String(alertText || "10").replace(/[^0-9]/g, "");
   return numberOnly ? Number(numberOnly) : 10;
@@ -1174,7 +1191,7 @@ export default function App() {
 
       const childName = appChildren.find((c) => c.id === alert.childId)?.name || "아이";
       const title = `${childName}, ${alert.title} 갈 시간이에요`;
-      const body = `${alert.start} 시작 · 장소: ${alert.place}`;
+      const body = `${formatKoreanTime(alert.start)} 시작 · 장소: ${alert.place}`;
 
       const alertTimeText = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
       const alertData = {
@@ -1247,7 +1264,7 @@ export default function App() {
 
     const childName = child?.name || "아이";
     const title = `${childName}, 다음 일정 확인해요`;
-    const body = current ? `${current.title} · ${current.start} · ${current.place}` : "오늘은 등록된 일정이 없습니다.";
+    const body = current ? `${current.title} · ${formatKoreanTime(current.start)} · ${current.place}` : "오늘은 등록된 일정이 없습니다.";
 
     setAppAlerts((prev) =>
       [
@@ -1710,7 +1727,7 @@ function UrgentAlertOverlay({ alert, onClose }) {
         <div className="mt-4 rounded-3xl bg-rose-50 p-4 text-left">
           <p className="text-xs font-bold text-rose-400">{alert.childName}</p>
           <p className="mt-1 text-xl font-black text-rose-600">{alert.scheduleTitle}</p>
-          <p className="mt-2 text-sm font-bold text-slate-700">시간: {alert.start}</p>
+          <p className="mt-2 text-sm font-bold text-slate-700">시간: {formatKoreanTime(alert.start)}</p>
           <p className="mt-1 text-sm font-bold text-slate-700">장소: {alert.place}</p>
         </div>
         <p className="mt-3 break-keep text-xs leading-5 text-slate-500">
@@ -2611,7 +2628,7 @@ function ChildView({
           </div>
 
           <div className="grid grid-cols-2 gap-1.5 text-sm">
-            <InfoBox compact icon={<Clock size={16} />} label="시간" value={`${current.start} ~ ${current.end}`} />
+            <InfoBox compact icon={<Clock size={16} />} label="시간" value={formatKoreanTimeRange(current.start, current.end)} />
             <InfoBox compact icon={<Bell size={16} />} label="알림" value={current.alert} />
             <InfoBox compact icon={<Home size={16} />} label="이동" value={current.transport} />
             <InfoBox compact icon={<CalendarDays size={16} />} label="준비물" value={current.items} />
@@ -2643,7 +2660,7 @@ function ChildView({
               </div>
               {nextSchedule ? (
                 <div className="text-right">
-                  <p className="text-sm font-black text-pink-900">{nextSchedule.start}</p>
+                  <p className="text-sm font-black text-pink-900">{formatKoreanTime(nextSchedule.start)}</p>
                   <p className="mt-1 max-w-[120px] truncate text-xs text-pink-500">{nextSchedule.place}</p>
                 </div>
               ) : (
@@ -2880,7 +2897,7 @@ function ParentView({
                 <div>
                   <p className="font-black text-red-700">일정을 삭제할까요?</p>
                   <p className="mt-1 text-sm text-red-700">
-                    {deleteTarget.title} · {deleteTarget.day}요일 {deleteTarget.start}
+                    {deleteTarget.title} · {deleteTarget.day}요일 {formatKoreanTime(deleteTarget.start)}
                   </p>
                   <p className="mt-1 text-xs text-red-500">삭제한 일정은 현재 시제품에서는 되돌릴 수 없습니다.</p>
                 </div>
@@ -2989,7 +3006,7 @@ function ParentView({
                   <div>
                     <p className="font-black">{s.title}</p>
                     <p className="text-sm text-slate-500">
-                      {s.start} ~ {s.end}
+                      {formatKoreanTimeRange(s.start, s.end)}
                     </p>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle[s.status] || "bg-slate-100 text-slate-700"}`}>
@@ -3533,7 +3550,7 @@ function NotificationPanel({
                   {alert.diff === 0 ? "지금 이동할 시간이에요" : `${alert.diff}분 뒤 이동해요`}
                 </div>
                 <p className="mt-1 text-sm">
-                  {alert.title} · {alert.start} · {alert.place}
+                  {alert.title} · {formatKoreanTime(alert.start)} · {alert.place}
                 </p>
               </div>
             ))}
