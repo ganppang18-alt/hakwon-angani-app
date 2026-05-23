@@ -414,6 +414,13 @@ function getTodayDateLabel(now = new Date()) {
   return `${year}년 ${month}월 ${date}일 ${day}요일`;
 }
 
+function getShortDateLabel(now = new Date()) {
+  const month = now.getMonth() + 1;
+  const date = now.getDate();
+  const day = getTodayKoreanDay(now);
+  return `${month}/${date}(${day})`;
+}
+
 function getDateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -521,8 +528,31 @@ function getParentPastPraise(childName, selectedDay) {
   };
 }
 
+function getScheduleRepeatType(schedule) {
+  if (schedule.repeatType) return schedule.repeatType;
+  if (schedule.dateKey) return "once";
+  if (schedule.repeatWeekly) return "weekly";
+  return "weekly";
+}
+
+function getRepeatLabel(repeatType, selectedDay) {
+  const labels = {
+    once: "한 번만",
+    daily: "매일 반복",
+    weekly: `매주 ${selectedDay}요일 반복`,
+    weekdays: "월~금 반복",
+  };
+  return labels[repeatType] || "한 번만";
+}
+
 function isScheduleForSelectedDate(schedule, selectedDay, selectedDateKey) {
   if (schedule.dateKey) return schedule.dateKey === selectedDateKey;
+
+  const repeatType = getScheduleRepeatType(schedule);
+  if (repeatType === "daily") return true;
+  if (repeatType === "weekdays") return ["월", "화", "수", "목", "금"].includes(selectedDay);
+  if (repeatType === "weekly") return schedule.day === selectedDay;
+
   return schedule.day === selectedDay;
 }
 
@@ -561,6 +591,82 @@ function getNextRemainingSchedule(schedules, nowMinutes = getNowMinutes(), exclu
     .filter((s) => !["끝남", "귀가 완료"].includes(s.status))
     .filter((s) => timeToMinutes(s.start) > nowMinutes)
     .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))[0] || null;
+}
+
+function getRemainingScheduleSummary(schedules, nowMinutes = getNowMinutes(), excludeId = null) {
+  const remaining = [...(schedules || [])]
+    .filter((s) => s.id !== excludeId)
+    .filter((s) => !["끝남", "귀가 완료"].includes(s.status))
+    .filter((s) => timeToMinutes(s.start) > nowMinutes)
+    .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+  return remaining.map((schedule) => `${formatKoreanTime(schedule.start)} ${schedule.title}`);
+}
+
+function getUpcomingSchedulesForChild(schedules, childId, fromDate = new Date(), dayCount = 6) {
+  const start = addDays(new Date(fromDate), 1);
+  start.setHours(0, 0, 0, 0);
+  const nowKey = getDateKey(new Date());
+  const nowMinutes = getNowMinutes(new Date());
+  const result = [];
+
+  for (let i = 0; i < dayCount; i += 1) {
+    const date = addDays(start, i);
+    const dateKey = getDateKey(date);
+    const day = getTodayKoreanDay(date);
+
+    (schedules || [])
+      .filter((s) => s.childId === childId && isScheduleForSelectedDate(s, day, dateKey))
+      .forEach((schedule) => {
+        const status = schedule.dateKey ? schedule.status : schedule.statusByDate?.[dateKey] || "대기";
+        if (["끝남", "귀가 완료"].includes(status)) return;
+        if (dateKey === nowKey && timeToMinutes(schedule.end || schedule.start) < nowMinutes) return;
+
+        result.push({
+          ...schedule,
+          status,
+          displayDate: getShortDateLabel(date),
+          displayDateKey: dateKey,
+          displayDay: day,
+        });
+      });
+  }
+
+  const sorted = result.sort((a, b) => {
+    if (a.displayDateKey !== b.displayDateKey) return a.displayDateKey.localeCompare(b.displayDateKey);
+    return timeToMinutes(a.start) - timeToMinutes(b.start);
+  });
+
+  const groupedMap = new Map();
+  sorted.forEach((schedule) => {
+    const groupKey = [
+      schedule.childId,
+      schedule.title,
+      schedule.start,
+      schedule.end,
+      schedule.place,
+      getScheduleRepeatType(schedule),
+    ].join("|");
+
+    if (!groupedMap.has(groupKey)) {
+      groupedMap.set(groupKey, {
+        ...schedule,
+        groupedDateLabels: [schedule.displayDate],
+        groupedDateKeys: [schedule.displayDateKey],
+        groupedCount: 1,
+      });
+      return;
+    }
+
+    const existing = groupedMap.get(groupKey);
+    existing.groupedDateLabels.push(schedule.displayDate);
+    existing.groupedDateKeys.push(schedule.displayDateKey);
+    existing.groupedCount += 1;
+    const firstLabels = existing.groupedDateLabels.slice(0, 3).join(", ");
+    existing.displayDate = existing.groupedCount > 3 ? `${firstLabels} 외 ${existing.groupedCount - 3}회` : firstLabels;
+  });
+
+  return Array.from(groupedMap.values());
 }
 
 function loadSavedSchedules() {
@@ -852,6 +958,9 @@ function runSelfTests() {
   console.assert(getActiveAlerts(sample, "a", "월", 9 * 60 + 55).length === 1, "getActiveAlerts should find upcoming active alert");
   console.assert(getActiveAlerts(sample, "a", "월", 11 * 60 + 35).length === 0, "getActiveAlerts should ignore ended schedules");
   console.assert(typeof safeShareOrCopy === "function", "safeShareOrCopy should exist as share fallback helper");
+  console.assert(isScheduleForSelectedDate({ repeatType: "daily" }, "토", "2026-05-23") === true, "daily repeat should appear every day");
+  console.assert(isScheduleForSelectedDate({ repeatType: "weekdays" }, "토", "2026-05-23") === false, "weekdays repeat should not appear on Saturday");
+  console.assert(isScheduleForSelectedDate({ repeatType: "weekly", day: "화" }, "화", "2026-05-19") === true, "weekly repeat should appear on matching weekday");
   console.assert("01088337590".startsWith("010"), "Dad phone number should be available for tel links");
   console.assert("01027460913".startsWith("010"), "Mom phone number should be available for tel links");
   console.assert(statusStyle["귀가 완료"].includes("emerald"), "Home arrival status should have a visible style");
@@ -891,12 +1000,12 @@ export default function App() {
   const emptyScheduleForm = {
     title: "",
     place: "",
-    address: "",
     start: "",
     end: "",
     transport: "",
     items: "",
     alert: defaultAlertTime,
+    repeatType: "once",
   };
   const [newSchedule, setNewSchedule] = useState(emptyScheduleForm);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
@@ -1141,6 +1250,10 @@ export default function App() {
     () =>
       schedules
         .filter((s) => s.childId === selectedChild && isScheduleForSelectedDate(s, selectedDay, selectedDateKey))
+        .map((s) => ({
+          ...s,
+          status: s.dateKey ? s.status : s.statusByDate?.[selectedDateKey] || "대기",
+        }))
         .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start)),
     [schedules, selectedChild, selectedDay, selectedDateKey]
   );
@@ -1166,6 +1279,11 @@ export default function App() {
   const activeAlerts = useMemo(
     () => getActiveAlerts(visibleSchedules, selectedChild, selectedDay),
     [visibleSchedules, selectedChild, selectedDay, nowTick]
+  );
+
+  const upcomingSchedules = useMemo(
+    () => getUpcomingSchedulesForChild(schedules, selectedChild, new Date(nowTick), 6),
+    [schedules, selectedChild, nowTick]
   );
   const todayHomework = useMemo(
     () => homework.filter((item) => item.childId === selectedChild && item.day === selectedDay),
@@ -1308,7 +1426,21 @@ export default function App() {
 
   const updateStatus = (id, status) => {
     const targetSchedule = schedules.find((s) => s.id === id);
-    setSchedules((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
+    setSchedules((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        if (!s.dateKey) {
+          return {
+            ...s,
+            statusByDate: {
+              ...(s.statusByDate || {}),
+              [selectedDateKey]: status,
+            },
+          };
+        }
+        return { ...s, status };
+      })
+    );
 
     const statusMessage = {
       "도착 완료": "도착 확인이 부모님 화면에 표시됩니다.",
@@ -1342,7 +1474,7 @@ export default function App() {
     ].slice(0, 5));
   }; 
 
-  const requestDeleteSchedule = (schedule) => setDeleteTarget(schedule);
+  const requestDeleteSchedule = (schedule, deleteKey = schedule.id) => setDeleteTarget({ ...schedule, deleteKey });
   const cancelDeleteSchedule = () => setDeleteTarget(null);
 
   const confirmDeleteSchedule = () => {
@@ -1357,11 +1489,12 @@ export default function App() {
     const scheduleData = {
       childId: selectedChild,
       day: selectedDay,
-      dateKey: selectedDateKey,
-      dateLabel: getTodayDateLabel(selectedDate),
+      ...(newSchedule.repeatType === "once"
+        ? { dateKey: selectedDateKey, dateLabel: getTodayDateLabel(selectedDate), repeatType: "once", repeatWeekly: false }
+        : { dateKey: null, dateLabel: getRepeatLabel(newSchedule.repeatType, selectedDay), repeatType: newSchedule.repeatType, repeatWeekly: newSchedule.repeatType === "weekly" }),
       title: newSchedule.title.trim(),
       place: newSchedule.place.trim() || "장소를 입력해주세요",
-      address: newSchedule.address.trim() || "상세 위치를 입력해주세요",
+      address: newSchedule.place.trim() || "장소를 입력해주세요",
       start: newSchedule.start,
       end: newSchedule.end || newSchedule.start,
       transport: newSchedule.transport.trim() || "이동방법 입력 필요",
@@ -1385,12 +1518,12 @@ export default function App() {
     setNewSchedule({
       title: schedule.title || "",
       place: schedule.place || "",
-      address: schedule.address || "",
       start: schedule.start || "",
       end: schedule.end || "",
       transport: schedule.transport || "",
       items: schedule.items || "",
       alert: schedule.alert || "10분 전",
+      repeatType: getScheduleRepeatType(schedule),
     });
     setShowAdd(true);
   };
@@ -1599,6 +1732,13 @@ export default function App() {
               cancelScheduleForm={cancelScheduleForm}
               selectedDateLabel={todayDateLabel}
               selectedDate={selectedDate}
+              selectedDay={selectedDay}
+              upcomingSchedules={upcomingSchedules}
+              onSelectUpcomingSchedule={(schedule) => {
+                const date = schedule.displayDateKey ? new Date(`${schedule.displayDateKey}T00:00:00`) : selectedDate;
+                setSelectedDate(date);
+                setSelectedDay(schedule.displayDay || getTodayKoreanDay(date));
+              }}
             />
           ) : isParentLockActive && !parentAuthenticated ? (
             <ParentLockScreen onUnlock={unlockParentMode} onBackToChild={() => setRole("child")} />
@@ -1623,6 +1763,12 @@ export default function App() {
               confirmDeleteSchedule={confirmDeleteSchedule}
               locationChecks={locationChecks}
               selectedDate={selectedDate}
+              upcomingSchedules={upcomingSchedules}
+              onSelectUpcomingSchedule={(schedule) => {
+                const date = schedule.displayDateKey ? new Date(`${schedule.displayDateKey}T00:00:00`) : selectedDate;
+                setSelectedDate(date);
+                setSelectedDay(schedule.displayDay || getTodayKoreanDay(date));
+              }}
             />
           ))}
 
@@ -2456,6 +2602,8 @@ function ChildView({
   schedules,
   hadSchedulesToday,
   selectedDate,
+  upcomingSchedules,
+  onSelectUpcomingSchedule,
   locationChecks,
   saveLocationCheck,
   parentContacts,
@@ -2472,7 +2620,13 @@ function ChildView({
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
   const contacts = parentContacts?.filter((parent) => parent.phone?.trim()) || [];
   const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
-  const nextSchedule = getNextRemainingSchedule(schedules, getNowMinutes(), current?.id);
+  const nextBaseMinutes = isTodayDate(selectedDate)
+    ? getNowMinutes()
+    : current
+      ? timeToMinutes(current.start)
+      : 0;
+  const nextSchedule = getNextRemainingSchedule(schedules, nextBaseMinutes, current?.id);
+  const remainingScheduleSummary = getRemainingScheduleSummary(schedules, nextBaseMinutes, current?.id);
   const currentLocationCheck = current ? locationChecks?.[current.id] : null;
 
   const checkCurrentLocation = () => {
@@ -2513,31 +2667,9 @@ function ChildView({
   }; 
 
   if (!current) {
-    const activityTips = getMeaningfulActivities(child.id, selectedDay);
-    const finishedToday = hadSchedulesToday && !isFutureDate(selectedDate);
-    const noScheduleTitle = finishedToday ? "오늘 일정은 모두 지나갔어요" : getNoScheduleTitle(selectedDate);
-    const noScheduleDescription = finishedToday
-      ? "지나간 일정은 홈 화면에서 숨기고, 남은 시간은 편안하게 정리해요."
-      : getNoScheduleDescription(selectedDate);
 
     return (
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-        <Card className="overflow-hidden rounded-[2rem] border border-rose-100 bg-white/90 shadow-lg shadow-rose-100/70">
-          <CardContent className="p-5 text-center">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-rose-100 text-2xl">
-              🌷
-            </div>
-            <p className="text-xs font-bold text-rose-400">
-              {child.name} · {selectedDay}요일
-            </p>
-            <h2 className="mt-2 text-2xl font-black text-slate-900">
-              {noScheduleTitle}
-            </h2>
-            <p className="mt-2 break-keep text-sm leading-6 text-slate-500">
-              {noScheduleDescription}
-            </p>
-          </CardContent>
-        </Card>
 
         <ChildScheduleAddBox
           showAdd={showAdd}
@@ -2548,56 +2680,15 @@ function ChildView({
           cancelScheduleForm={cancelScheduleForm}
           selectedDateLabel={selectedDateLabel}
           child={child}
+          selectedDay={selectedDay}
         />
-
-        {finishedToday ? (
-          <Card className="rounded-[2rem] border border-rose-100 bg-white/90 shadow-md shadow-rose-100/60">
-            <CardContent className="p-5 text-center">
-              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-2xl shadow-sm">
-                🌙
-              </div>
-              <p className="text-xs font-bold text-rose-400">오늘의 마무리 글귀</p>
-              <p className="mt-2 break-keep text-lg font-black leading-8 text-slate-800">
-                “오늘 해야 할 일을 해낸 것만으로도 충분히 멋져요. 이제 마음도 쉬어갈 시간이에요.”
-              </p>
-              <p className="mt-3 text-xs font-bold text-slate-400">{child.name}이는 오늘도 잘 해냈어요.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="rounded-[2rem] border border-orange-100 bg-white/90 shadow-md shadow-orange-100/60">
-            <CardContent className="p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-orange-400">오늘 스스로 해볼 일</p>
-                  <p className="text-lg font-black text-slate-900">작은 실천 3가지</p>
-                </div>
-                <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-500">혼자서도 OK</span>
-              </div>
-
-              <div className="space-y-2">
-                {activityTips.map((tip) => (
-                  <div key={tip.title} className="flex items-center gap-3 rounded-3xl bg-orange-50/70 p-3 text-left">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm">
-                      {tip.icon}
-                    </div>
-                    <div>
-                      <p className="font-black text-slate-900">{tip.title}</p>
-                      <p className="mt-0.5 break-keep text-xs leading-5 text-slate-500">{tip.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <ChildHopeQuote child={child} selectedDay={selectedDay} />
       </motion.div>
     );
   }
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+
       <Card className="overflow-hidden rounded-[2rem] border border-rose-100 bg-white/90 shadow-lg shadow-rose-100/70">
         <CardContent className="p-4">
           <div className="mb-3 flex items-center justify-between">
@@ -2649,24 +2740,33 @@ function ChildView({
           )}
 
           <div className="mt-2 rounded-3xl bg-pink-50 p-3 text-pink-900">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold text-pink-500">다음에 할 일</p>
-                {nextSchedule ? (
-                  <p className="mt-1 text-lg font-black text-pink-900">{nextSchedule.title}</p>
-                ) : (
-                  <p className="mt-1 text-lg font-black text-pink-300">없음</p>
+            <p className="text-xs font-bold text-pink-500">다음에 할 일</p>
+            {remainingScheduleSummary.length > 0 ? (
+              <div className="mt-1 flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="break-keep text-base font-black leading-6 text-pink-900">
+                    {remainingScheduleSummary.slice(0, 3).join(" → ")}
+                  </p>
+                  {remainingScheduleSummary.length > 3 && (
+                    <p className="mt-1 text-xs font-bold text-pink-500">
+                      외 {remainingScheduleSummary.length - 3}개 일정이 더 있어요
+                    </p>
+                  )}
+                </div>
+                {nextSchedule && (
+                  <div className="shrink-0 text-right">
+                    <p className="text-[11px] font-bold text-pink-400">가장 가까운 일정</p>
+                    <p className="mt-1 text-sm font-black text-pink-900">{formatKoreanTime(nextSchedule.start)}</p>
+                    <p className="mt-1 max-w-[100px] truncate text-xs text-pink-500">{nextSchedule.place}</p>
+                  </div>
                 )}
               </div>
-              {nextSchedule ? (
-                <div className="text-right">
-                  <p className="text-sm font-black text-pink-900">{formatKoreanTime(nextSchedule.start)}</p>
-                  <p className="mt-1 max-w-[120px] truncate text-xs text-pink-500">{nextSchedule.place}</p>
-                </div>
-              ) : (
-                <p className="text-right text-xs text-pink-400">오늘 남은 일정이 없어요</p>
-              )}
-            </div>
+            ) : (
+              <div className="mt-2 rounded-2xl bg-white/70 p-3 text-center">
+                <p className="text-base font-black text-pink-700">오늘 남은 일정이 없어요</p>
+                <p className="mt-1 text-xs font-bold text-pink-400">현재 일정만 잘 마치면 됩니다.</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -2703,9 +2803,8 @@ function ChildView({
         cancelScheduleForm={cancelScheduleForm}
         selectedDateLabel={selectedDateLabel}
         child={child}
+        selectedDay={selectedDay}
       />
-
-      <ChildHopeQuote child={child} selectedDay={selectedDay} />
 
       <div className="space-y-2">
         <Button
@@ -2750,6 +2849,7 @@ function ChildView({
   );
 }
 
+
 function ChildScheduleAddBox({
   showAdd,
   setShowAdd,
@@ -2759,6 +2859,7 @@ function ChildScheduleAddBox({
   cancelScheduleForm,
   selectedDateLabel,
   child,
+  selectedDay,
 }) {
   return (
     <Card className="rounded-[2rem] border border-rose-100 bg-white/80 shadow-sm backdrop-blur">
@@ -2812,6 +2913,16 @@ function ChildScheduleAddBox({
               placeholder="준비물 예: 교재, 필통, 물병"
               className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300"
             />
+            <select
+              value={newSchedule.repeatType || "once"}
+              onChange={(e) => updateNewSchedule("repeatType", e.target.value)}
+              className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-black text-slate-700 outline-none focus:border-rose-300"
+            >
+              <option value="once">한 번만</option>
+              <option value="daily">매일 반복</option>
+              <option value="weekly">매주 반복</option>
+              <option value="weekdays">월~금 반복</option>
+            </select>
             <div className="grid grid-cols-2 gap-2">
               <Button variant="outline" className="h-11 rounded-2xl" onClick={cancelScheduleForm}>
                 취소
@@ -2821,7 +2932,7 @@ function ChildScheduleAddBox({
               </Button>
             </div>
             <p className="rounded-2xl bg-orange-50 p-3 text-center text-xs font-bold text-orange-500">
-              달력에서 고른 날짜에 저장돼요.
+              {newSchedule.repeatType === "once" ? "달력에서 고른 날짜에 저장돼요." : `${getRepeatLabel(newSchedule.repeatType, selectedDay)} 일정으로 계속 표시돼요.`}
             </p>
           </div>
         )}
@@ -2848,6 +2959,8 @@ function ParentView({
   schedules,
   hadSchedulesToday,
   selectedDate,
+  upcomingSchedules,
+  onSelectUpcomingSchedule,
   updateStatus,
   showAdd,
   setShowAdd,
@@ -2867,15 +2980,18 @@ function ParentView({
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
       <Card className="rounded-3xl border-0 bg-white shadow-lg">
         <CardContent className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500">부모 확인 화면</p>
-              <h2 className="text-2xl font-black">
-                {child.name} {selectedDay}요일 일정
-              </h2>
+          <div className="mb-4">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-500">부모 확인 화면</p>
+                <h2 className="text-2xl font-black">
+                  {child.name} {selectedDay}요일 일정
+                </h2>
+              </div>
             </div>
+
             <Button
-              className="rounded-2xl"
+              className="h-12 w-full rounded-2xl text-sm font-black"
               onClick={() => {
                 if (showAdd) {
                   cancelScheduleForm();
@@ -2888,27 +3004,76 @@ function ParentView({
             </Button>
           </div>
 
-          {deleteTarget && (
-            <div className="mb-4 rounded-3xl border border-red-100 bg-red-50 p-4">
-              <div className="mb-3 flex items-start gap-3">
-                <div className="rounded-full bg-white p-2 text-red-600">
-                  <Trash2 size={20} />
-                </div>
+          {upcomingSchedules?.length > 0 && (
+            <div className="mb-4 rounded-3xl border border-rose-100 bg-rose-50/70 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <p className="font-black text-red-700">일정을 삭제할까요?</p>
-                  <p className="mt-1 text-sm text-red-700">
-                    {deleteTarget.title} · {deleteTarget.day}요일 {formatKoreanTime(deleteTarget.start)}
-                  </p>
-                  <p className="mt-1 text-xs text-red-500">삭제한 일정은 현재 시제품에서는 되돌릴 수 없습니다.</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-black text-slate-900">앞으로 등록된 일정</p>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-rose-500 shadow-sm">
+                      오늘 이후 6일 일정이 나옵니다.
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs font-bold text-rose-500">오늘 이후의 다음 일정만 보여줍니다.</p>
                 </div>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
+                  {upcomingSchedules.length}개
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="rounded-2xl bg-white" onClick={cancelDeleteSchedule}>
-                  취소
-                </Button>
-                <Button variant="danger" className="rounded-2xl" onClick={confirmDeleteSchedule}>
-                  삭제하기
-                </Button>
+
+              <div className="space-y-2">
+                {upcomingSchedules.map((schedule) => (
+                  <div
+                    key={`${schedule.id}-${schedule.displayDateKey}`}
+                    className="rounded-2xl bg-white p-3 shadow-sm"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onSelectUpcomingSchedule?.(schedule)}
+                      className="mb-2 flex w-full items-center justify-between gap-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">
+                            {schedule.displayDate}
+                          </span>
+                          {getScheduleRepeatType(schedule) !== "once" && (
+                            <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-black text-orange-500">
+                              {getRepeatLabel(getScheduleRepeatType(schedule), schedule.day)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-sm font-black text-slate-900">{schedule.title}</p>
+                        <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
+                          {formatKoreanTimeRange(schedule.start, schedule.end)} · {schedule.place}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-400">
+                        보기
+                      </span>
+                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 bg-white text-emerald-700" onClick={() => startEditSchedule(schedule)}>
+                        <Pencil size={14} className="mr-1" /> 수정
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl border-red-200 bg-white text-red-600"
+                        onClick={() => requestDeleteSchedule(schedule, `${schedule.id}-${schedule.displayDateKey}`)}
+                      >
+                        <Trash2 size={14} className="mr-1" /> 삭제
+                      </Button>
+                    </div>
+                    {deleteTarget?.deleteKey === `${schedule.id}-${schedule.displayDateKey}` && (
+                      <DeleteConfirmBox
+                        schedule={deleteTarget}
+                        onCancel={cancelDeleteSchedule}
+                        onConfirm={confirmDeleteSchedule}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -2919,7 +3084,9 @@ function ParentView({
                 <div>
                   <p className="text-sm font-bold text-emerald-700">{editingScheduleId ? "일정 수정" : "새 일정 추가"}</p>
                   <p className="text-xs text-slate-500">
-                    {child.name} · {selectedDay}요일 일정으로 저장됩니다.
+                    {newSchedule.repeatType === "once"
+                      ? `${child.name} · 선택한 날짜의 ${selectedDay}요일 일정으로 저장됩니다.`
+                      : `${child.name} · ${getRepeatLabel(newSchedule.repeatType, selectedDay)} 일정으로 저장됩니다.`}
                   </p>
                 </div>
                 <button onClick={cancelScheduleForm} className="rounded-full bg-white p-2 text-slate-500">
@@ -2955,12 +3122,6 @@ function ParentView({
                   className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
                 />
                 <input
-                  value={newSchedule.address}
-                  onChange={(e) => updateNewSchedule("address", e.target.value)}
-                  placeholder="상세 위치 예: 상가 3층, 학교 후문 앞"
-                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                />
-                <input
                   value={newSchedule.transport}
                   onChange={(e) => updateNewSchedule("transport", e.target.value)}
                   placeholder="이동방법 예: 도보, 셔틀, 부모 차량"
@@ -2983,6 +3144,16 @@ function ParentView({
                   <option>20분 전</option>
                   <option>30분 전</option>
                 </select>
+                <select
+                  value={newSchedule.repeatType || "once"}
+                  onChange={(e) => updateNewSchedule("repeatType", e.target.value)}
+                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-black text-slate-700 outline-none focus:border-emerald-400"
+                >
+                  <option value="once">한 번만</option>
+                  <option value="daily">매일 반복</option>
+                  <option value="weekly">매주 반복</option>
+                  <option value="weekdays">월~금 반복</option>
+                </select>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -3003,16 +3174,33 @@ function ParentView({
             {schedules.map((s) => (
               <div key={s.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-black">{s.title}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-black">{s.title}</p>
                     <p className="text-sm text-slate-500">
                       {formatKoreanTimeRange(s.start, s.end)}
                     </p>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle[s.status] || "bg-slate-100 text-slate-700"}`}>
-                    {s.status}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle[s.status] || "bg-slate-100 text-slate-700"}`}>
+                      {s.status}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => requestDeleteSchedule(s, `today-${s.id}`)}
+                      className="rounded-full bg-white p-2 text-red-400 shadow-sm hover:bg-red-50"
+                      title="일정 삭제"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
+                {deleteTarget?.deleteKey === `today-${s.id}` && (
+                  <DeleteConfirmBox
+                    schedule={deleteTarget}
+                    onCancel={cancelDeleteSchedule}
+                    onConfirm={confirmDeleteSchedule}
+                  />
+                )}
                 <p className="mb-1 flex items-center gap-1 text-sm text-slate-700">
                   <MapPin size={15} /> {s.place}
                 </p>
@@ -3024,15 +3212,12 @@ function ParentView({
                     위치 확인: {locationChecks[s.id].place || s.place} · {locationChecks[s.id].time} · 위치 상태: {getLocationAccuracyLabel(locationChecks[s.id].accuracy)}
                   </p>
                 )}
-                <div className="mb-2 grid grid-cols-3 gap-2">
+                <div className="mb-2 grid grid-cols-2 gap-2">
                   <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => startEditSchedule(s)}>
                     <Pencil size={14} className="mr-1" /> 수정
                   </Button>
                   <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "대기")}>
-                    대기
-                  </Button>
-                  <Button size="sm" variant="outline" className="rounded-xl border-red-200 text-red-600 hover:bg-red-50" onClick={() => requestDeleteSchedule(s)}>
-                    <Trash2 size={14} className="mr-1" /> 삭제
+                    대기 상태로
                   </Button>
                 </div>
                 <div className="grid grid-cols-4 gap-2">
@@ -3059,62 +3244,23 @@ function ParentView({
 }
 
 function NoParentScheduleCard({ child, selectedDay, selectedDate, hadSchedulesToday }) {
-  const reminders = getParentFamilyReminders(child.id, selectedDay);
-  const isPast = isPastDate(selectedDate);
-  const praise = getParentPastPraise(child.name, selectedDay);
+  return null;
+}
 
-  if (isPast) {
-    return (
-      <div className="rounded-[2rem] border border-rose-100 bg-gradient-to-br from-rose-50 via-orange-50 to-white p-5 text-center">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
-          💗
-        </div>
-        <p className="text-xs font-bold text-rose-400">
-          {child.name} · {selectedDay}요일
-        </p>
-        <p className="mt-2 text-2xl font-black text-slate-900">{praise.title}</p>
-        <p className="mt-2 break-keep text-sm leading-6 text-slate-500">{praise.desc}</p>
-        <div className="mt-4 rounded-3xl bg-white/80 p-4 text-center shadow-sm">
-          <p className="break-keep text-base font-black leading-7 text-rose-600">{praise.quote}</p>
-        </div>
-        <p className="mt-3 text-xs font-bold text-slate-400">
-          지나간 일정은 숨기고, 아이에게 남길 따뜻한 말만 보여줍니다.
-        </p>
-      </div>
-    );
-  }
-
+function DeleteConfirmBox({ schedule, onCancel, onConfirm }) {
   return (
-    <div className="rounded-[2rem] border border-rose-100 bg-gradient-to-br from-rose-50 via-orange-50 to-white p-4">
-      <div className="mb-4 text-center">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
-          💞
-        </div>
-        <p className="text-xs font-bold text-rose-400">
-          {child.name} · {selectedDay}요일
-        </p>
-        <p className="mt-1 text-xl font-black text-slate-900">오늘은 가족 마음을 채우는 날</p>
-        <p className="mt-2 break-keep text-sm leading-6 text-slate-500">
-          일정이 비어 있는 시간에는 아이에게 사랑과 용기를 전해보세요.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        {reminders.map((item) => (
-          <div key={item.title} className="flex items-center gap-3 rounded-3xl bg-white/80 p-3 text-left shadow-sm">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-xl">
-              {item.icon}
-            </div>
-            <div>
-              <p className="font-black text-slate-900">{item.title}</p>
-              <p className="mt-0.5 break-keep text-xs leading-5 text-slate-500">{item.desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 rounded-3xl bg-white/70 p-3 text-center text-xs font-bold leading-5 text-rose-500">
-        오늘도 완벽한 부모보다 따뜻한 부모가 아이에게 더 오래 남습니다.
+    <div className="mt-2 rounded-2xl border border-red-100 bg-red-50 p-3">
+      <p className="text-sm font-black text-red-700">이 일정을 삭제할까요?</p>
+      <p className="mt-1 text-xs font-bold text-red-500">
+        {schedule.title} · {formatKoreanTime(schedule.start)}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Button variant="outline" className="rounded-2xl bg-white" onClick={onCancel}>
+          취소
+        </Button>
+        <Button variant="danger" className="rounded-2xl" onClick={onConfirm}>
+          삭제하기
+        </Button>
       </div>
     </div>
   );
