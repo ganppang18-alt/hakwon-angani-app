@@ -593,17 +593,19 @@ function getNextRemainingSchedule(schedules, nowMinutes = getNowMinutes(), exclu
     .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))[0] || null;
 }
 
-function getRemainingScheduleSummary(schedules, nowMinutes = getNowMinutes(), excludeId = null) {
-  const remaining = [...(schedules || [])]
+function getRemainingSchedules(schedules, nowMinutes = getNowMinutes(), excludeId = null) {
+  return [...(schedules || [])]
     .filter((s) => s.id !== excludeId)
     .filter((s) => !["끝남", "귀가 완료"].includes(s.status))
     .filter((s) => timeToMinutes(s.start) > nowMinutes)
     .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-
-  return remaining.map((schedule) => `${formatKoreanTime(schedule.start)} ${schedule.title}`);
 }
 
-function getUpcomingSchedulesForChild(schedules, childId, fromDate = new Date(), dayCount = 6) {
+function getRemainingScheduleSummary(schedules, nowMinutes = getNowMinutes(), excludeId = null) {
+  return getRemainingSchedules(schedules, nowMinutes, excludeId).map((schedule) => `${formatKoreanTime(schedule.start)} ${schedule.title}`);
+}
+
+function getUpcomingSchedulesForChild(schedules, childId, fromDate = new Date(), dayCount = 14) {
   const start = addDays(new Date(fromDate), 1);
   start.setHours(0, 0, 0, 0);
   const nowKey = getDateKey(new Date());
@@ -1098,6 +1100,21 @@ export default function App() {
   }, [homeworkPoints]);
 
   useEffect(() => {
+    const resetVersion = "donghun-reset-500-v1";
+    if (homeworkPoints?.resetDonghunVersion === resetVersion) return;
+
+    setHomeworkPoints((prev) => ({
+      ...(prev || {}),
+      points: {
+        ...(prev?.points || {}),
+        donghun: 0,
+      },
+      awardedKeys: (prev?.awardedKeys || []).filter((key) => !String(key).startsWith("donghun-")),
+      resetDonghunVersion: resetVersion,
+    }));
+  }, [homeworkPoints?.resetDonghunVersion]);
+
+  useEffect(() => {
     saveNoticesToStorage(notices);
   }, [notices]);
 
@@ -1309,7 +1326,7 @@ export default function App() {
   );
 
   const upcomingSchedules = useMemo(
-    () => getUpcomingSchedulesForChild(schedules, selectedChild, new Date(nowTick), 6),
+    () => getUpcomingSchedulesForChild(schedules, selectedChild, new Date(nowTick), 14),
     [schedules, selectedChild, nowTick]
   );
   const todayHomework = useMemo(
@@ -1318,7 +1335,7 @@ export default function App() {
   );
   const todayDateLabel = useMemo(() => getTodayDateLabel(selectedDate), [selectedDate]);
 
-  useEffect(() => {
+  const confirmHomeworkPoints = () => {
     const awardKey = `${selectedChild}-${selectedDateKey}`;
     const alreadyAwarded = homeworkPoints.awardedKeys?.includes(awardKey);
     const canAward = todayHomework.length > 0 && todayHomework.every((item) => item.done) && !alreadyAwarded;
@@ -1328,7 +1345,7 @@ export default function App() {
     setHomeworkPoints((prev) => ({
       points: {
         ...(prev.points || {}),
-        [selectedChild]: (prev.points?.[selectedChild] || 0) + 100,
+        [selectedChild]: (prev.points?.[selectedChild] || 0) + 500,
       },
       awardedKeys: [...(prev.awardedKeys || []), awardKey],
     }));
@@ -1336,13 +1353,13 @@ export default function App() {
     setAppAlerts((prev) => [
       {
         id: `homework-point-${Date.now()}`,
-        title: "숙제 포인트 100점 획득!",
-        body: `${child.name} 오늘 숙제를 모두 완료했어요. 정말 잘했어요!`,
+        title: "숙제 포인트 500점 지급 완료!",
+        body: `${child.name} 숙제를 부모님이 확인해서 500포인트가 지급됐어요.`,
         time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
       },
       ...prev,
     ].slice(0, 5));
-  }, [todayHomework, homeworkPoints.awardedKeys, selectedChild, selectedDateKey, child.name]);
+  };
   const weekDates = useMemo(() => {
     const monday = getMondayOfWeek(selectedDate);
     return days.map((day, index) => ({ day, date: addDays(monday, index) }));
@@ -1479,6 +1496,19 @@ export default function App() {
 
   const updateStatus = (id, status) => {
     const targetSchedule = schedules.find((s) => s.id === id);
+    const futureBlockedStatuses = ["도착 완료", "끝남", "귀가 완료"];
+
+    if (isFutureDate(selectedDate) && futureBlockedStatuses.includes(status)) {
+      setStatusConfirm({
+        id: Date.now(),
+        title: "아직 도래하지 않은 일정이에요",
+        body: targetSchedule
+          ? `${targetSchedule.title} 일정은 해당 날짜가 되었을 때 확인할 수 있어요.`
+          : "해당 날짜가 되었을 때 확인할 수 있어요.",
+      });
+      setTimeout(() => setStatusConfirm(null), 2200);
+      return;
+    }
     setSchedules((prev) =>
       prev.map((s) => {
         if (s.id !== id) return s;
@@ -1632,38 +1662,45 @@ export default function App() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-rose-50 via-orange-50 to-amber-50 text-slate-900">
-      <div className="pointer-events-none absolute -top-12 -left-10 h-44 w-44 rounded-full bg-rose-200/30 blur-3xl" />
-      <div className="pointer-events-none absolute top-36 -right-16 h-52 w-52 rounded-full bg-amber-200/35 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-24 left-8 h-36 w-36 rounded-full bg-pink-200/25 blur-3xl" />
-      <div className="pointer-events-none absolute right-7 top-28 text-5xl opacity-[0.06]">💗</div>
-      <div className="pointer-events-none absolute left-6 top-[430px] text-4xl opacity-[0.05]">🏠</div>
-      <div className="pointer-events-none absolute bottom-10 right-10 text-5xl opacity-[0.05]">🎒</div>
+    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#fff7fb_0%,#fffaf2_46%,#f3fbff_100%)] text-slate-900">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-10 -top-12 h-44 w-44 rounded-full bg-pink-200/40 blur-3xl" />
+        <div className="absolute -right-12 top-20 h-52 w-52 rounded-full bg-sky-200/35 blur-3xl" />
+        <div className="absolute left-8 bottom-24 h-40 w-40 rounded-full bg-yellow-200/30 blur-3xl" />
+        <div className="absolute right-4 bottom-36 h-44 w-44 rounded-full bg-rose-100/45 blur-3xl" />
+        <div className="absolute left-5 top-24 text-2xl opacity-25">⭐</div>
+        <div className="absolute right-10 top-32 text-2xl opacity-25">☁️</div>
+        <div className="absolute left-8 bottom-44 text-2xl opacity-25">🌈</div>
+        <div className="absolute right-8 bottom-20 text-2xl opacity-25">🧸</div>
+        <div className="absolute left-1/3 top-14 text-xl opacity-20">✏️</div>
+        <div className="absolute right-1/4 bottom-52 text-xl opacity-20">📚</div>
+        <div className="absolute left-10 top-[430px] text-3xl opacity-15">🎒</div>
+      </div>
       {urgentAlert && <UrgentAlertOverlay alert={urgentAlert} onClose={() => setUrgentAlert(null)} />}
       {statusConfirm && <StatusConfirmToast confirm={statusConfirm} onClose={() => setStatusConfirm(null)} />}
 
       <div className="relative z-10 mx-auto max-w-md px-2.5 py-2">
-        <header className="mb-2 rounded-[1.6rem] border border-white/70 bg-white/75 p-3 shadow-[0_8px_24px_rgba(244,114,182,0.10)] backdrop-blur">
+        <header className="mb-2 rounded-[1.8rem] border border-white/80 bg-white/85 p-3.5 shadow-[0_10px_30px_rgba(244,114,182,0.14)] backdrop-blur">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 text-center">
               <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50/80 px-3 py-1 text-[11px] font-black text-rose-500 shadow-sm" style={{ fontFamily: appFontFamily }}>
                 <CalendarDays size={13} /> 초등학생 동선 알림앱 <span className="text-rose-400">♥</span>
               </div>
 
-              <div className="relative inline-block">
+              <div className="relative mx-auto inline-block">
                 <div className="absolute -left-1 -top-1 h-3 w-3 rounded-full bg-rose-300/45 blur-[1px]" />
                 <div className="absolute -right-2 bottom-1 h-2.5 w-2.5 rounded-full bg-amber-300/55 blur-[1px]" />
                 <h1
-                  className="relative text-[34px] font-black leading-none text-slate-950"
+                  className="relative text-[40px] font-black leading-none text-slate-950"
                   style={{
                     fontFamily: appFontFamily,
-                    letterSpacing: "-0.045em",
+                    letterSpacing: "0.20em",
                     textShadow: "2px 3px 0 rgba(244, 114, 182, 0.20), 0 2px 12px rgba(15,23,42,0.08)",
                   }}
                 >
                   학원안가니?
                 </h1>
-                <div className="mt-1.5 h-1 w-20 rounded-full bg-gradient-to-r from-rose-400 via-pink-300 to-orange-200 shadow-sm" />
+                <div className="mx-auto mt-2 h-1.5 w-24 rounded-full bg-gradient-to-r from-rose-400 via-pink-300 to-yellow-200 shadow-sm" />
               </div>
             </div>
 
@@ -1838,6 +1875,7 @@ export default function App() {
             role={role}
             homeworkPoints={homeworkPoints.points?.[selectedChild] || 0}
             pointAwardedToday={homeworkPoints.awardedKeys?.includes(`${selectedChild}-${selectedDateKey}`)}
+            onConfirmHomeworkPoints={confirmHomeworkPoints}
           />
         )}
 
@@ -2192,6 +2230,386 @@ function MainMenu({ activeMenu, setActiveMenu }) {
   );
 }
 
+function ChildView({
+  child,
+  current,
+  selectedDay,
+  updateStatus,
+  schedules,
+  selectedDate,
+  parentContacts,
+}) {
+  if (!current) {
+    const selfTasks = [
+      { icon: "✏️", title: "숙제 확인하기", desc: "오늘 해야 할 숙제가 있는지 살펴봐요." },
+      { icon: "🎒", title: "가방 정리하기", desc: "내일 필요한 책과 준비물을 챙겨요." },
+      { icon: "📖", title: "10분 독서하기", desc: "짧게라도 책을 읽어보면 좋아요." },
+    ];
+
+    return (
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+        <Card className="rounded-[1.7rem] border border-rose-100 bg-white/90 shadow-sm">
+          <CardContent className="p-4">
+            <div className="mb-3 text-center">
+              <p className="text-xs font-bold text-rose-400">{child.name} · {selectedDay}요일</p>
+              <h2 className="mt-1 text-xl font-black text-slate-900">오늘은 학원 일정이 없어요</h2>
+              <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-400">
+                스스로 할 일을 하나 골라보면 더 멋진 하루가 돼요.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {selfTasks.map((task) => (
+                <div key={task.title} className="flex items-center gap-3 rounded-2xl bg-rose-50/70 p-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm">{task.icon}</div>
+                  <div>
+                    <p className="text-sm font-black text-slate-900">{task.title}</p>
+                    <p className="mt-0.5 break-keep text-xs font-bold leading-4 text-slate-400">{task.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  }
+
+  const nextBaseMinutes = isTodayDate(selectedDate) ? getNowMinutes() : timeToMinutes(current.start);
+  const remainingSchedules = getRemainingSchedules(schedules, nextBaseMinutes, current?.id);
+  const contacts = parentContacts?.filter((parent) => parent.phone?.trim()) || [];
+  const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
+  const [showParentContact, setShowParentContact] = useState(false);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+
+      <Card className="overflow-hidden rounded-[1.7rem] border border-rose-100 bg-white/95 shadow-[0_10px_24px_rgba(244,114,182,0.12)]">
+        <CardContent className="p-3">
+          <div className="mb-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <div className="justify-self-start truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
+              {child.name} · {child.grade}
+            </div>
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1.5 shadow-sm">
+              <span className="text-base">⭐</span>
+              <span className="text-[16px] font-black tracking-[0.08em] text-rose-500">오늘의 일정</span>
+            </div>
+            <div />
+          </div>
+
+          <div className="mb-2 rounded-[1.4rem] bg-gradient-to-br from-white via-rose-50/80 to-white p-2.5 shadow-sm">
+            <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+              <div className="min-w-0">
+                <h2 className="truncate text-[32px] font-black leading-none tracking-tight text-rose-500">
+                  {current.title}
+                </h2>
+                <div className="mt-1 h-1 w-20 rounded-full bg-yellow-300/80" />
+              </div>
+              <div className="shrink-0 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-center shadow-sm">
+                <p className="text-[10px] font-black text-rose-400">시간</p>
+                <p className="text-[15px] font-black leading-tight text-rose-700">{formatKoreanTimeRange(current.start, current.end)}</p>
+              </div>
+            </div>
+
+            <div className="mt-2 flex items-center gap-2 rounded-[1.2rem] border border-slate-100 bg-white px-2.5 py-2 shadow-sm">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-50 text-lg">📍</div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-slate-900">{current.place}</p>
+                <p className="truncate text-[10px] font-bold text-slate-400">장소 확인 후 이동</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-2 grid grid-cols-3 gap-1.5">
+            <MiniScheduleInfo icon="🔔" label="알림" value={current.alert} tone="amber" compact />
+            <MiniScheduleInfo icon="👟" label="이동" value={current.transport} tone="emerald" compact />
+            <MiniScheduleInfo icon="🎒" label="준비물" value={current.items} tone="violet" compact />
+          </div>
+
+          <div className="rounded-[1.4rem] border border-violet-100 bg-violet-50/70 p-2.5 shadow-sm">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">🗓️</span>
+                <p className="text-sm font-black text-violet-500">다음에 할 일</p>
+              </div>
+              {remainingSchedules.length > 0 && (
+                <span className="rounded-full border border-violet-200 bg-white px-2 py-0.5 text-[10px] font-black text-violet-500">
+                  {remainingSchedules.length}개 남음
+                </span>
+              )}
+            </div>
+
+            {remainingSchedules.length > 0 ? (
+              <div className="overflow-hidden rounded-[1.1rem] border border-violet-100 bg-white shadow-sm">
+                <div className="grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center border-b border-violet-100 px-2.5 py-1.5 text-[10px] font-black text-violet-400">
+                  <span className="text-center">시간</span>
+                  <span className="text-center">과목</span>
+                  <span className="text-center">장소</span>
+                </div>
+                {remainingSchedules.slice(0, 2).map((schedule, index) => (
+                  <div
+                    key={`next-${schedule.id}`}
+                    className={`grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center gap-1 px-2.5 py-2 ${index !== Math.min(remainingSchedules.length, 2) - 1 ? "border-b border-violet-50" : ""}`}
+                  >
+                    <p className="truncate text-center text-[11px] font-black text-violet-600">{formatKoreanTime(schedule.start)}</p>
+                    <p className="truncate text-center text-xs font-black text-slate-900">{schedule.title}</p>
+                    <p className="truncate text-center text-[12px] font-black text-slate-900">{schedule.place}</p>
+                  </div>
+                ))}
+                {remainingSchedules.length > 2 && (
+                  <p className="border-t border-violet-50 px-2.5 py-1.5 text-[11px] font-bold text-violet-500">
+                    외 {remainingSchedules.length - 2}개 일정이 더 있어요
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-[1.1rem] bg-white px-3 py-3 text-center shadow-sm">
+                <p className="text-xs font-black text-violet-500">오늘 남은 일정이 없어요</p>
+                <p className="mt-0.5 text-[10px] font-bold text-slate-400">현재 일정만 잘 마치면 됩니다.</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
+          <Button className="h-10 rounded-3xl border-2 border-emerald-300 bg-emerald-100 text-sm font-black text-emerald-900 shadow-sm hover:bg-emerald-200" onClick={() => updateStatus(current.id, "도착 완료")}>도착했어요</Button>
+          <Button className="h-10 rounded-3xl border-2 border-blue-500 bg-blue-500 text-sm font-black text-white shadow-sm hover:bg-blue-600" onClick={() => updateStatus(current.id, "끝남")}>끝났어요</Button>
+        </div>
+        <Button className="h-10 w-full rounded-3xl border-2 border-amber-300 bg-amber-100 text-sm font-black text-amber-900 shadow-sm hover:bg-amber-200" onClick={() => updateStatus(current.id, "귀가 완료")}>집에 왔어요</Button>
+      </div>
+
+      {contacts.length > 0 && (
+        <div className="rounded-[1.5rem] border border-emerald-100 bg-white/90 p-2 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowParentContact((prev) => !prev)}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm"
+          >
+            <Phone size={16} /> 부모님께 연락하기
+          </button>
+
+          {showParentContact && (
+            <div className="mt-2 space-y-2">
+              {contacts.slice(0, 2).map((parent) => (
+                <div key={parent.id || parent.label} className="grid grid-cols-2 gap-2 rounded-2xl bg-emerald-50/70 p-2">
+                  <a href={`tel:${parent.phone}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-700 shadow-sm">
+                    {parent.label || parent.name} 전화
+                  </a>
+                  <a href={`sms:${parent.phone}?body=${smsText}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-slate-700 shadow-sm">
+                    {parent.label || parent.name} 문자
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function ParentView({
+  child,
+  selectedDay,
+  schedules,
+  hadSchedulesToday,
+  updateStatus,
+  showAdd,
+  setShowAdd,
+  newSchedule,
+  updateNewSchedule,
+  addSchedule,
+  startEditSchedule,
+  editingScheduleId,
+  cancelScheduleForm,
+  requestDeleteSchedule,
+  deleteTarget,
+  cancelDeleteSchedule,
+  confirmDeleteSchedule,
+  locationChecks,
+  selectedDate,
+  upcomingSchedules,
+  onSelectUpcomingSchedule,
+}) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <Card className="rounded-[2rem] border border-rose-100 bg-white/90 shadow-lg shadow-rose-100/70">
+        <CardContent className="p-4">
+          <div className="mb-4">
+            <div className="mb-3">
+              <p className="text-sm text-slate-500">부모 확인 화면</p>
+              <h2 className="text-2xl font-black">{child.name} {selectedDay}요일 일정</h2>
+            </div>
+            <Button
+              className="h-12 w-full rounded-2xl text-sm font-black"
+              onClick={() => {
+                if (showAdd) cancelScheduleForm();
+                else setShowAdd(true);
+              }}
+            >
+              <Plus size={18} className="mr-1" /> 일정 추가
+            </Button>
+          </div>
+
+          {showAdd && (
+            <ChildScheduleAddBox
+              showAdd={showAdd}
+              setShowAdd={setShowAdd}
+              newSchedule={newSchedule}
+              updateNewSchedule={updateNewSchedule}
+              addSchedule={addSchedule}
+              cancelScheduleForm={cancelScheduleForm}
+              selectedDateLabel={getTodayDateLabel(selectedDate)}
+              child={child}
+              selectedDay={selectedDay}
+              editingScheduleId={editingScheduleId}
+            />
+          )}
+
+          <section className="rounded-3xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-base font-black text-slate-900">오늘의 일정</p>
+                <p className="mt-0.5 text-xs font-bold text-slate-400">선택한 날짜에 실제로 확인할 일정입니다.</p>
+              </div>
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-black text-slate-500">
+                {schedules.length}개
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {schedules.length === 0 && (
+                <div className="rounded-2xl bg-slate-50 p-4 text-center text-sm font-bold text-slate-400">
+                  선택한 날짜에 표시할 일정이 없습니다.
+                </div>
+              )}
+              {schedules.map((s) => (
+              <div key={s.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-black">{s.title}</p>
+                    <p className="text-sm text-slate-500">{formatKoreanTimeRange(s.start, s.end)}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle[s.status] || "bg-slate-100 text-slate-700"}`}>{s.status}</span>
+                    <button type="button" onClick={() => requestDeleteSchedule(s, `today-${s.id}`)} className="rounded-full bg-white p-2 text-red-400 shadow-sm hover:bg-red-50" title="일정 삭제">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+                {deleteTarget?.deleteKey === `today-${s.id}` && <DeleteConfirmBox schedule={deleteTarget} onCancel={cancelDeleteSchedule} onConfirm={confirmDeleteSchedule} />}
+                <p className="mb-1 flex items-center gap-1 text-sm text-slate-700"><MapPin size={15} /> {s.place}</p>
+                <p className="mb-2 text-sm text-slate-500">이동: {s.transport} · 준비물: {s.items}</p>
+                {locationChecks?.[s.id] && (
+                  <p className="mb-3 rounded-2xl bg-cyan-50 p-2 text-xs font-bold text-cyan-700">
+                    위치 확인: {locationChecks[s.id].place || s.place} · {locationChecks[s.id].time} · 위치 상태: {getLocationAccuracyLabel(locationChecks[s.id].accuracy)}
+                  </p>
+                )}
+                <div className="mb-2 grid grid-cols-2 gap-2">
+                  <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => startEditSchedule(s)}><Pencil size={14} className="mr-1" /> 수정</Button>
+                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "대기")}>대기 상태로</Button>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "이동 중")}>이동</Button>
+                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "도착 완료")}>도착</Button>
+                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "끝남")}>끝남</Button>
+                  <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => updateStatus(s.id, "귀가 완료")}>귀가</Button>
+                </div>
+              </div>
+              ))}
+            </div>
+          </section>
+
+          {upcomingSchedules?.length > 0 && (
+            <section className="mt-4 rounded-3xl border-2 border-rose-100 bg-rose-50/70 p-3 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-base font-black text-slate-900">향후 2주간 일정</p>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-rose-500 shadow-sm">향후 2주간 일정이 나옵니다.</span>
+                  </div>
+                  <p className="mt-0.5 text-xs font-bold text-rose-500">오늘 이후의 다음 일정을 확인할 수 있어요.</p>
+                </div>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">{upcomingSchedules.length}개</span>
+              </div>
+              <div className="space-y-2">
+                {upcomingSchedules.map((schedule) => (
+                  <div key={`${schedule.id}-${schedule.displayDateKey}`} className="rounded-2xl bg-white p-3 shadow-sm">
+                    <button type="button" onClick={() => onSelectUpcomingSchedule?.(schedule)} className="mb-2 flex w-full items-center justify-between gap-3 text-left">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{schedule.displayDate}</span>
+                          {getScheduleRepeatType(schedule) !== "once" && (
+                            <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-black text-orange-500">{getRepeatLabel(getScheduleRepeatType(schedule), schedule.day)}</span>
+                          )}
+                        </div>
+                        <p className="truncate text-sm font-black text-slate-900">{schedule.title}</p>
+                        <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{formatKoreanTimeRange(schedule.start, schedule.end)} · {schedule.place}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-400">보기</span>
+                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 bg-white text-emerald-700" onClick={() => startEditSchedule(schedule)}><Pencil size={14} className="mr-1" /> 수정</Button>
+                      <Button size="sm" variant="outline" className="rounded-xl border-red-200 bg-white text-red-600" onClick={() => requestDeleteSchedule(schedule, `${schedule.id}-${schedule.displayDateKey}`)}><Trash2 size={14} className="mr-1" /> 삭제</Button>
+                    </div>
+                    {deleteTarget?.deleteKey === `${schedule.id}-${schedule.displayDateKey}` && <DeleteConfirmBox schedule={deleteTarget} onCancel={cancelDeleteSchedule} onConfirm={confirmDeleteSchedule} />}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function ChildScheduleAddBox({
+  showAdd,
+  setShowAdd,
+  newSchedule,
+  updateNewSchedule,
+  addSchedule,
+  cancelScheduleForm,
+  selectedDateLabel,
+  child,
+  selectedDay,
+  editingScheduleId,
+}) {
+  return (
+    <div className="mb-4 rounded-3xl border border-rose-100 bg-rose-50 p-3">
+      <p className="mb-2 text-sm font-black text-rose-600">{editingScheduleId ? "일정 수정" : "일정 추가"}</p>
+      <div className="space-y-2">
+        <input value={newSchedule.title} onChange={(e) => updateNewSchedule("title", e.target.value)} placeholder="과목명 예: 영어학원" className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300" />
+        <div className="grid grid-cols-2 gap-2">
+          <input type="time" value={newSchedule.start} onChange={(e) => updateNewSchedule("start", e.target.value)} className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300" />
+          <input type="time" value={newSchedule.end} onChange={(e) => updateNewSchedule("end", e.target.value)} className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300" />
+        </div>
+        <input value={newSchedule.place} onChange={(e) => updateNewSchedule("place", e.target.value)} placeholder="장소명 예: 체움학원" className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300" />
+        <input value={newSchedule.transport} onChange={(e) => updateNewSchedule("transport", e.target.value)} placeholder="이동방법 예: 걸어서 이동" className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300" />
+        <input value={newSchedule.items} onChange={(e) => updateNewSchedule("items", e.target.value)} placeholder="준비물 예: 교재, 필통, 물병" className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300" />
+        <select value={newSchedule.alert} onChange={(e) => updateNewSchedule("alert", e.target.value)} className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300">
+          <option>5분 전</option><option>10분 전</option><option>15분 전</option><option>20분 전</option><option>30분 전</option>
+        </select>
+        <select value={newSchedule.repeatType || "once"} onChange={(e) => updateNewSchedule("repeatType", e.target.value)} className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-black text-slate-700 outline-none focus:border-rose-300">
+          <option value="once">한 번만</option>
+          <option value="daily">매일 반복</option>
+          <option value="weekly">매주 반복</option>
+          <option value="weekdays">월~금 반복</option>
+        </select>
+        <p className="rounded-2xl bg-white/70 p-3 text-center text-xs font-bold text-rose-500">
+          {newSchedule.repeatType === "once" ? `${child.name} · 선택한 날짜의 ${selectedDay}요일 일정으로 저장됩니다.` : `${child.name} · ${getRepeatLabel(newSchedule.repeatType, selectedDay)} 일정으로 저장됩니다.`}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" className="h-11 rounded-2xl bg-white" onClick={cancelScheduleForm}>취소</Button>
+          <Button className="h-11 rounded-2xl" onClick={addSchedule} disabled={!newSchedule.title.trim() || !newSchedule.start.trim()}><Save size={16} className="mr-1" /> 저장</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomeworkPanel({
   child,
   selectedDay,
@@ -2204,9 +2622,12 @@ function HomeworkPanel({
   role,
   homeworkPoints,
   pointAwardedToday,
+  onConfirmHomeworkPoints,
 }) {
   const doneCount = homework.filter((item) => item.done).length;
   const totalCount = homework.length;
+  const allHomeworkDone = totalCount > 0 && doneCount === totalCount;
+  const waitingParentConfirm = allHomeworkDone && !pointAwardedToday;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
@@ -2298,12 +2719,22 @@ function HomeworkPanel({
             </div>
           )}
 
+          {role === "parent" && waitingParentConfirm && (
+            <Button className="mt-3 h-11 w-full rounded-3xl bg-amber-500 text-white hover:bg-amber-600" onClick={onConfirmHomeworkPoints}>
+              숙제 확인하고 500포인트 지급
+            </Button>
+          )}
+
           <div className="mt-3 rounded-3xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-500">
             {pointAwardedToday
-              ? "오늘 숙제를 모두 완료해서 포인트 100점을 받았어요!"
-              : role === "child"
-                ? "오늘 숙제를 모두 체크하면 포인트 100점을 받을 수 있어요."
-                : "아이가 오늘 숙제를 모두 완료하면 포인트 100점이 쌓입니다."}
+              ? "부모님 확인이 완료되어 오늘 포인트 500점이 지급됐어요!"
+              : waitingParentConfirm
+                ? role === "parent"
+                  ? "아이가 숙제를 모두 완료했어요. 확인 버튼을 누르면 포인트가 지급됩니다."
+                  : "숙제를 모두 완료했어요. 부모님 확인을 기다리는 중이에요."
+                : role === "child"
+                  ? "숙제를 모두 체크한 뒤 부모님이 확인하면 포인트 500점을 받을 수 있어요."
+                  : "아이가 숙제를 모두 완료하면 부모님 확인 후 포인트 500점이 지급됩니다."}
           </div>
         </CardContent>
       </Card>
@@ -2334,6 +2765,7 @@ function WebAppGuidePanel({
   const [passwordMessage, setPasswordMessage] = useState("");
 
   const updateParentInfo = (index, field, value) => {
+    if (!canEditSettings) return;
     setFamilyInfo((prev) => ({
       ...prev,
       parents: prev.parents.map((parent, i) => (i === index ? { ...parent, [field]: value } : parent)),
@@ -2341,6 +2773,7 @@ function WebAppGuidePanel({
   };
 
   const updateChildInfo = (index, field, value) => {
+    if (!canEditSettings) return;
     setFamilyInfo((prev) => ({
       ...prev,
       children: prev.children.map((child, i) => (i === index ? { ...child, [field]: value } : child)),
@@ -2348,6 +2781,7 @@ function WebAppGuidePanel({
   };
 
   const addChildInfo = () => {
+    if (!canEditSettings) return;
     setFamilyInfo((prev) => ({
       ...prev,
       children: [
@@ -2364,16 +2798,15 @@ function WebAppGuidePanel({
   };
 
   const deleteChildInfo = (index) => {
+    if (!canEditSettings) return;
     setFamilyInfo((prev) => {
       if ((prev.children || []).length <= 1) return prev;
-      return {
-        ...prev,
-        children: prev.children.filter((_, i) => i !== index),
-      };
+      return { ...prev, children: prev.children.filter((_, i) => i !== index) };
     });
   };
 
   const handleSavePassword = () => {
+    if (!canEditSettings) return;
     const ok = onSaveParentPassword(passwordInput);
     setPasswordMessage(ok ? "부모용 비밀번호가 저장되고 잠금이 켜졌어요." : "비밀번호는 4자리 이상으로 만들어주세요.");
     if (ok) setPasswordInput("");
@@ -2381,65 +2814,25 @@ function WebAppGuidePanel({
   };
 
   const handleToggleLock = (enabled) => {
+    if (!canEditSettings) return;
     const ok = onToggleParentLock(enabled);
     setPasswordMessage(ok ? (enabled ? "부모용 잠금이 켜졌어요." : "부모용 잠금이 해제됐어요.") : "비밀번호를 먼저 만들어주세요.");
     setTimeout(() => setPasswordMessage(""), 2500);
   };
 
   const settingItems = [
-    {
-      id: "profile",
-      title: "내정보관리",
-      desc: "보호자와 아이 정보를 입력합니다.",
-      icon: <UserCog size={20} />,
-      detail: "가족 정보를 입력하면 다른 가족도 이 앱을 바로 사용할 수 있습니다.",
-    },
-    {
-      id: "familyCode",
-      title: "가족코드 설정",
-      desc: "가족별 공유방을 만들거나 이동합니다.",
-      icon: <KeyRound size={20} />,
-      detail: "같은 가족코드를 입력한 휴대폰끼리만 일정과 공지사항이 공유됩니다.",
-    },
-    {
-      id: "alarm",
-      title: "알림설정",
-      desc: "일정 알림과 테스트 알림을 관리합니다.",
-      icon: <SlidersHorizontal size={20} />,
-      detail: "알림 시간을 선택하면 모든 일정에 바로 반영됩니다.",
-    },
-    {
-      id: "parentLock",
-      title: "부모용 잠금",
-      desc: parentSecurity?.lockEnabled ? "부모용 화면이 비밀번호로 보호 중입니다." : "부모용 화면 잠금을 설정할 수 있습니다.",
-      icon: parentSecurity?.lockEnabled ? <Lock size={20} /> : <Unlock size={20} />,
-      detail: "비밀번호를 만들면 부모용 화면에 들어갈 때 비밀번호 확인이 필요합니다.",
-    },
-    {
-      id: "logout",
-      title: "로그아웃",
-      desc: "현재 시제품은 로그인 없이 사용 중입니다.",
-      icon: <LogOut size={20} />,
-      detail: "Firebase 로그인 기능을 연결하면 실제 로그아웃 기능을 사용할 수 있습니다.",
-    },
-    {
-      id: "version",
-      title: "버전 정보",
-      desc: "학원 안가니? v0.1.0",
-      icon: <Info size={20} />,
-      detail: isCloudSyncEnabled()
-        ? "현재 버전은 가족 공유 저장소와 연결되어 엄마·아빠·아이 화면에서 같은 일정을 볼 수 있습니다."
-        : "현재 버전은 기기별 저장 모드입니다. Firebase 주소를 입력하면 가족 공유 모드로 사용할 수 있습니다.",
-    },
+    { id: "profile", title: "내정보관리", desc: "보호자와 아이 정보를 입력합니다.", icon: <UserCog size={20} /> },
+    { id: "familyCode", title: "가족코드 설정", desc: "가족별 공유방을 만들거나 이동합니다.", icon: <KeyRound size={20} /> },
+    { id: "alarm", title: "알림설정", desc: "일정 알림 시간을 관리합니다.", icon: <SlidersHorizontal size={20} /> },
+    { id: "parentLock", title: "부모용 잠금", desc: parentSecurity?.lockEnabled ? "부모용 화면이 비밀번호로 보호 중입니다." : "부모용 화면 잠금을 설정할 수 있습니다.", icon: parentSecurity?.lockEnabled ? <Lock size={20} /> : <Unlock size={20} /> },
+    { id: "version", title: "버전 정보", desc: "학원 안가니? v0.1.0", icon: <Info size={20} /> },
   ];
 
   return (
     <Card className="mb-4 rounded-3xl border-0 bg-white shadow-lg">
       <CardContent className="p-4">
         <div className="mb-4 flex items-center gap-3">
-          <div className="rounded-full bg-emerald-100 p-2 text-emerald-700">
-            <Smartphone size={20} />
-          </div>
+          <div className="rounded-full bg-emerald-100 p-2 text-emerald-700"><Smartphone size={20} /></div>
           <div>
             <p className="font-black">설정</p>
             <p className="text-xs text-slate-500">앱 정보와 사용 설정을 관리합니다.</p>
@@ -2472,77 +2865,16 @@ function WebAppGuidePanel({
 
               {selectedSetting === item.id && (
                 <div className="mt-2 rounded-2xl border border-slate-100 bg-white p-3 text-sm text-slate-600">
-                  {item.id === "alarm" ? (
-                    <div className="space-y-3">
-                      <p>{item.detail}</p>
-                      <select
-                        value={defaultAlertTime}
-                        onChange={(e) => onDefaultAlertTimeChange(e.target.value)}
-                        disabled={!canEditSettings}
-                        className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-emerald-400"
-                      >
-                        <option>5분 전</option>
-                        <option>10분 전</option>
-                        <option>15분 전</option>
-                        <option>20분 전</option>
-                        <option>30분 전</option>
-                      </select>
-                      <p className="rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">
-                        현재 기본 알림: {defaultAlertTime}
-                      </p>
-                    </div>
-                  ) : item.id === "familyCode" ? (
-                    <div className="space-y-3">
-                      <p>{item.detail}</p>
-                      <div className="rounded-2xl bg-rose-50 p-3 text-xs font-bold leading-5 text-rose-600">
-                        현재 가족코드: {familyShareCode}
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          value={familyCodeInput}
-                          onChange={(e) => setFamilyCodeInput(e.target.value)}
-                          disabled={!canEditSettings}
-                          placeholder="예: 우리집, minjun-family"
-                          className="min-w-0 flex-1 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
-                        />
-                        <Button className="shrink-0 rounded-2xl" onClick={onApplyFamilyShareCode} disabled={!canEditSettings}>
-                          적용
-                        </Button>
-                      </div>
-                      <p className="rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">
-                        다른 가족이 이 앱을 쓰려면 자기 가족만의 코드를 입력하면 됩니다. 같은 코드를 입력한 사람끼리만 같은 데이터를 봅니다.
-                      </p>
-                    </div>
-                  ) : item.id === "profile" ? (
+                  {item.id === "profile" ? (
                     <div className="space-y-4">
-                      <p>{item.detail}</p>
-
                       <div className="rounded-3xl bg-rose-50 p-3">
                         <p className="mb-2 text-sm font-black text-rose-600">부모 연락처</p>
                         <div className="space-y-2">
                           {(familyInfo?.parents || []).map((parent, index) => (
                             <div key={parent.id || index} className="grid grid-cols-3 gap-2">
-                              <input
-                                value={parent.label || ""}
-                                onChange={(e) => updateParentInfo(index, "label", e.target.value)}
-                                disabled={!canEditSettings}
-                                placeholder="호칭"
-                                className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-rose-300"
-                              />
-                              <input
-                                value={parent.name || ""}
-                                onChange={(e) => updateParentInfo(index, "name", e.target.value)}
-                                disabled={!canEditSettings}
-                                placeholder="이름"
-                                className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300"
-                              />
-                              <input
-                                value={parent.phone || ""}
-                                onChange={(e) => updateParentInfo(index, "phone", e.target.value)}
-                                disabled={!canEditSettings}
-                                placeholder="연락처"
-                                className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300"
-                              />
+                              <input value={parent.label || ""} onChange={(e) => updateParentInfo(index, "label", e.target.value)} disabled={!canEditSettings} placeholder="호칭" className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-rose-300" />
+                              <input value={parent.name || ""} onChange={(e) => updateParentInfo(index, "name", e.target.value)} disabled={!canEditSettings} placeholder="이름" className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300" />
+                              <input value={parent.phone || ""} onChange={(e) => updateParentInfo(index, "phone", e.target.value)} disabled={!canEditSettings} placeholder="연락처" className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300" />
                             </div>
                           ))}
                         </div>
@@ -2551,770 +2883,67 @@ function WebAppGuidePanel({
                       <div className="rounded-3xl bg-orange-50 p-3">
                         <div className="mb-2 flex items-center justify-between">
                           <p className="text-sm font-black text-orange-600">아이 정보</p>
-                          <Button size="sm" className="rounded-xl" onClick={addChildInfo} disabled={!canEditSettings}>
-                            <Plus size={14} className="mr-1" /> 아이 추가
-                          </Button>
+                          <Button size="sm" className="rounded-xl" onClick={addChildInfo} disabled={!canEditSettings}><Plus size={14} className="mr-1" /> 아이 추가</Button>
                         </div>
                         <div className="space-y-2">
                           {(familyInfo?.children || []).map((child, index) => (
                             <div key={child.id || index} className="rounded-3xl bg-white/70 p-2">
                               <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                                <input
-                                  value={child.name || ""}
-                                  onChange={(e) => updateChildInfo(index, "name", e.target.value)}
-                                  disabled={!canEditSettings}
-                                  placeholder="아이 이름"
-                                  className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-orange-300"
-                                />
-                                <input
-                                  value={child.grade || ""}
-                                  onChange={(e) => updateChildInfo(index, "grade", e.target.value)}
-                                  disabled={!canEditSettings}
-                                  placeholder="학년 예: 초3"
-                                  className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => deleteChildInfo(index)}
-                                  disabled={!canEditSettings || (familyInfo?.children || []).length <= 1}
-                                  className="rounded-2xl border border-red-100 bg-white px-3 py-2 text-xs font-black text-red-400 transition hover:bg-red-50 disabled:opacity-30"
-                                  title="아이 정보 삭제"
-                                >
-                                  삭제
-                                </button>
+                                <input value={child.name || ""} onChange={(e) => updateChildInfo(index, "name", e.target.value)} disabled={!canEditSettings} placeholder="아이 이름" className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-orange-300" />
+                                <input value={child.grade || ""} onChange={(e) => updateChildInfo(index, "grade", e.target.value)} disabled={!canEditSettings} placeholder="학년 예: 초3" className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300" />
+                                <button type="button" onClick={() => deleteChildInfo(index)} disabled={!canEditSettings || (familyInfo?.children || []).length <= 1} className="rounded-2xl border border-red-100 bg-white px-3 py-2 text-xs font-black text-red-400 transition hover:bg-red-50 disabled:opacity-30">삭제</button>
                               </div>
-                              <input
-                                value={child.phone || ""}
-                                onChange={(e) => updateChildInfo(index, "phone", e.target.value)}
-                                disabled={!canEditSettings}
-                                placeholder="아이 핸드폰 번호 예: 01012345678"
-                                className="mt-2 w-full rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
-                              />
+                              <input value={child.phone || ""} onChange={(e) => updateChildInfo(index, "phone", e.target.value)} disabled={!canEditSettings} placeholder="아이 핸드폰 번호 예: 01012345678" className="mt-2 w-full rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300" />
                             </div>
                           ))}
                         </div>
                       </div>
-
-                      <p className="rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">
-                        입력한 정보는 자동 저장됩니다. Firebase 가족 공유가 켜져 있으면 다른 휴대폰에도 같이 반영됩니다.
-                      </p>
+                    </div>
+                  ) : item.id === "familyCode" ? (
+                    <div className="space-y-3">
+                      <div className="rounded-2xl bg-rose-50 p-3 text-xs font-bold leading-5 text-rose-600">현재 가족코드: {familyShareCode}</div>
+                      <div className="flex gap-2">
+                        <input value={familyCodeInput} onChange={(e) => setFamilyCodeInput(e.target.value)} disabled={!canEditSettings} placeholder="예: 우리집, minjun-family" className="min-w-0 flex-1 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300" />
+                        <Button className="shrink-0 rounded-2xl" onClick={onApplyFamilyShareCode} disabled={!canEditSettings}>적용</Button>
+                      </div>
+                      <p className="rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">같은 가족코드를 입력한 휴대폰끼리만 일정과 공지가 공유됩니다.</p>
+                    </div>
+                  ) : item.id === "alarm" ? (
+                    <div className="space-y-3">
+                      <p className="text-xs font-bold text-slate-500">일정 전에 알림을 받을 기본 시간을 정합니다.</p>
+                      <select value={defaultAlertTime} onChange={(e) => onDefaultAlertTimeChange(e.target.value)} disabled={!canEditSettings} className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400">
+                        <option>5분 전</option><option>10분 전</option><option>15분 전</option><option>20분 전</option><option>30분 전</option>
+                      </select>
                     </div>
                   ) : item.id === "parentLock" ? (
                     <div className="space-y-3">
-                      <p>{item.detail}</p>
-                      <div className="rounded-2xl bg-rose-50 p-3 text-xs font-bold text-rose-600">
-                        현재 상태: {parentSecurity?.lockEnabled ? "잠금 켜짐" : "잠금 해제"}
+                      <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} disabled={!canEditSettings} placeholder="부모용 비밀번호 4자리 이상" className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button className="rounded-2xl" onClick={handleSavePassword} disabled={!canEditSettings}>저장</Button>
+                        <Button variant="outline" className="rounded-2xl" onClick={() => handleToggleLock(true)} disabled={!canEditSettings}>잠금</Button>
+                        <Button variant="outline" className="rounded-2xl" onClick={() => handleToggleLock(false)} disabled={!canEditSettings}>해제</Button>
                       </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="password"
-                          inputMode="numeric"
-                          value={passwordInput}
-                          onChange={(e) => setPasswordInput(e.target.value)}
-                          disabled={!canEditSettings}
-                          placeholder="새 비밀번호 4자리 이상"
-                          className="min-w-0 flex-1 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
-                        />
-                        <Button className="shrink-0 rounded-2xl" onClick={handleSavePassword} disabled={!canEditSettings}>
-                          저장
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant={parentSecurity?.lockEnabled ? "secondary" : "outline"}
-                          className="rounded-2xl"
-                          onClick={() => handleToggleLock(true)}
-                          disabled={!canEditSettings}
-                        >
-                          <Lock size={16} className="mr-1" /> 잠금
-                        </Button>
-                        <Button
-                          variant={!parentSecurity?.lockEnabled ? "secondary" : "outline"}
-                          className="rounded-2xl"
-                          onClick={() => handleToggleLock(false)}
-                          disabled={!canEditSettings}
-                        >
-                          <Unlock size={16} className="mr-1" /> 해제
-                        </Button>
-                      </div>
-                      {passwordMessage && (
-                        <p className="rounded-2xl bg-slate-50 p-3 text-xs font-bold text-slate-600">{passwordMessage}</p>
-                      )}
+                      {passwordMessage && <p className="rounded-2xl bg-rose-50 p-3 text-xs font-bold text-rose-500">{passwordMessage}</p>}
                     </div>
                   ) : (
-                    item.detail
+                    <div className="space-y-3">
+                      <p className="rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">
+                        가족 공유 저장소와 연결되어 엄마·아빠·아이 화면에서 같은 일정을 볼 수 있습니다.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" className="rounded-2xl" onClick={onCopy}><Copy size={14} className="mr-1" /> 링크 복사</Button>
+                        <Button variant="outline" className="rounded-2xl" onClick={onShare}><Share2 size={14} className="mr-1" /> 공유</Button>
+                      </div>
+                      {copyMessage && <p className="rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-600">{copyMessage}</p>}
+                    </div>
                   )}
                 </div>
               )}
             </div>
           ))}
         </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <Button className="rounded-2xl" onClick={onShare}>
-            <Share2 size={16} className="mr-2" /> 공유
-          </Button>
-          <Button variant="outline" className="rounded-2xl" onClick={onCopy}>
-            <Copy size={16} className="mr-2" /> 링크 복사
-          </Button>
-        </div>
-        {copyMessage && <p className="mt-2 rounded-2xl bg-emerald-50 p-2 text-center text-xs font-bold text-emerald-700">{copyMessage}</p>}
       </CardContent>
     </Card>
-  );
-}
-
-function ChildView({
-  child,
-  current,
-  selectedDay,
-  updateStatus,
-  schedules,
-  hadSchedulesToday,
-  selectedDate,
-  upcomingSchedules,
-  onSelectUpcomingSchedule,
-  locationChecks,
-  saveLocationCheck,
-  parentContacts,
-  showAdd,
-  setShowAdd,
-  newSchedule,
-  updateNewSchedule,
-  addSchedule,
-  cancelScheduleForm,
-  selectedDateLabel,
-}) {
-  const [showContactOptions, setShowContactOptions] = useState(false);
-  const [locationMessage, setLocationMessage] = useState("");
-  const [isCheckingLocation, setIsCheckingLocation] = useState(false);
-  const contacts = parentContacts?.filter((parent) => parent.phone?.trim()) || [];
-  const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
-  const nextBaseMinutes = isTodayDate(selectedDate)
-    ? getNowMinutes()
-    : current
-      ? timeToMinutes(current.start)
-      : 0;
-  const nextSchedule = getNextRemainingSchedule(schedules, nextBaseMinutes, current?.id);
-  const remainingScheduleSummary = getRemainingScheduleSummary(schedules, nextBaseMinutes, current?.id);
-  const currentLocationCheck = current ? locationChecks?.[current.id] : null;
-
-  const checkCurrentLocation = () => {
-    if (!current) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setLocationMessage("이 브라우저에서는 위치 확인을 지원하지 않아요.");
-      return;
-    }
-
-    setIsCheckingLocation(true);
-    setLocationMessage("현재 위치를 확인하는 중이에요...");
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const locationData = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: Math.round(position.coords.accuracy || 0),
-          time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
-          scheduleTitle: current.title,
-          place: current.place,
-          address: current.address,
-        };
-        saveLocationCheck(current.id, locationData);
-        setLocationMessage("위치 확인이 완료됐어요.");
-        setIsCheckingLocation(false);
-      },
-      () => {
-        setLocationMessage("위치 권한이 거부되었거나 위치를 확인할 수 없어요.");
-        setIsCheckingLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      }
-    );
-  }; 
-
-  if (!current) {
-    const selfTasks = [
-      { icon: "✏️", title: "숙제 먼저 확인하기", desc: "오늘 해야 할 숙제가 있는지 살펴봐요." },
-      { icon: "🎒", title: "가방 정리하기", desc: "내일 필요한 책과 준비물을 챙겨요." },
-      { icon: "📖", title: "10분 독서하기", desc: "짧게라도 책을 읽어보면 좋아요." },
-    ];
-
-    return (
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-        <Card className="rounded-[1.7rem] border border-rose-100 bg-white/90 shadow-sm">
-          <CardContent className="p-4">
-            <div className="mb-3 text-center">
-              <p className="text-xs font-bold text-rose-400">{child.name} · {selectedDay}요일</p>
-              <h2 className="mt-1 text-xl font-black text-slate-900">오늘은 학원 일정이 없어요</h2>
-              <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-400">
-                스스로 할 일을 하나 골라보면 더 멋진 하루가 돼요.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              {selfTasks.map((task) => (
-                <div key={task.title} className="flex items-center gap-3 rounded-2xl bg-rose-50/70 p-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm">
-                    {task.icon}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-slate-900">{task.title}</p>
-                    <p className="mt-0.5 break-keep text-xs font-bold leading-4 text-slate-400">{task.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-
-      <Card className="overflow-hidden rounded-[2rem] border border-rose-100 bg-white/90 shadow-lg shadow-rose-100/70">
-        <CardContent className="p-4">
-          <div className="mb-3 rounded-[1.6rem] bg-gradient-to-br from-rose-50 via-pink-50 to-white p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-400">지금 보고 있는 아이</p>
-                <div className="mt-1 inline-flex items-center rounded-full bg-white px-2.5 py-1 text-xs font-black text-rose-600 shadow-sm">
-                  {child.name} · {child.grade}
-                </div>
-              </div>
-              <span className="shrink-0 rounded-full bg-rose-500 px-3 py-1.5 text-xs font-black text-white shadow-sm">
-                지금 할 일
-              </span>
-            </div>
-
-            <h2 className="break-keep text-[28px] font-black leading-tight text-rose-500">{current.title}</h2>
-
-            <div className="mt-3 rounded-2xl bg-white/80 p-3 shadow-sm">
-              <div className="flex items-start gap-2">
-                <MapPin size={18} className="mt-0.5 shrink-0 text-rose-400" />
-                <div className="min-w-0">
-                  <p className="break-keep text-base font-black text-slate-900">{current.place}</p>
-                  <p className="mt-0.5 break-keep text-xs font-bold text-slate-400">장소를 확인하고 이동해요</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5 text-sm">
-            <InfoBox compact icon={<Clock size={16} />} label="시간" value={formatKoreanTimeRange(current.start, current.end)} highlight />
-            <InfoBox compact icon={<Bell size={16} />} label="알림" value={current.alert} />
-            <InfoBox compact icon={<Home size={16} />} label="이동" value={current.transport} />
-            <InfoBox compact icon={<CalendarDays size={16} />} label="준비물" value={current.items} />
-          </div>
-
-          {(locationMessage || currentLocationCheck) && (
-            <div className="mt-3 rounded-2xl border border-cyan-100 bg-cyan-50 p-3 text-sm text-cyan-800">
-              <p className="font-bold">{locationMessage || "위치 확인 완료"}</p>
-              {currentLocationCheck && (
-                <div className="mt-1 text-xs leading-5 text-cyan-700">
-                  <p>장소: {currentLocationCheck.place || current.place}</p>
-                  <p>상세 위치: {currentLocationCheck.address || current.address}</p>
-                  <p>확인 시간: {currentLocationCheck.time}</p>
-                  <p>위치 상태: {getLocationAccuracyLabel(currentLocationCheck.accuracy)}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-2 rounded-3xl bg-pink-50 p-3 text-pink-900">
-            <p className="text-xs font-bold text-pink-500">다음에 할 일</p>
-            {remainingScheduleSummary.length > 0 ? (
-              <div className="mt-1 flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="break-keep text-base font-black leading-6 text-pink-900">
-                    {remainingScheduleSummary.slice(0, 3).join(" → ")}
-                  </p>
-                  {remainingScheduleSummary.length > 3 && (
-                    <p className="mt-1 text-xs font-bold text-pink-500">
-                      외 {remainingScheduleSummary.length - 3}개 일정이 더 있어요
-                    </p>
-                  )}
-                </div>
-                {nextSchedule && (
-                  <div className="shrink-0 text-right">
-                    <p className="text-[11px] font-bold text-pink-400">가장 가까운 일정</p>
-                    <p className="mt-1 text-sm font-black text-pink-900">{formatKoreanTime(nextSchedule.start)}</p>
-                    <p className="mt-1 max-w-[100px] truncate text-xs text-pink-500">{nextSchedule.place}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-2 rounded-2xl bg-white/70 p-3 text-center">
-                <p className="text-base font-black text-pink-700">오늘 남은 일정이 없어요</p>
-                <p className="mt-1 text-xs font-bold text-pink-400">현재 일정만 잘 마치면 됩니다.</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            className="h-12 rounded-3xl border-2 border-emerald-300 bg-emerald-100 text-base font-black text-emerald-900 shadow-sm hover:bg-emerald-200"
-            onClick={() => updateStatus(current.id, "도착 완료")}
-          >
-            <CheckCircle2 className="mr-2" /> 도착했어요
-          </Button>
-          <Button
-            className="h-12 rounded-3xl border-2 border-blue-500 bg-blue-500 text-base font-black text-white shadow-sm hover:bg-blue-600"
-            onClick={() => updateStatus(current.id, "끝남")}
-          >
-            끝났어요
-          </Button>
-        </div>
-        <Button
-          className="h-12 w-full rounded-3xl border-2 border-amber-300 bg-amber-100 text-base font-black text-amber-900 shadow-sm hover:bg-amber-200"
-          onClick={() => updateStatus(current.id, "귀가 완료")}
-        >
-          <Home className="mr-2" size={22} /> 집에 왔어요
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        <Button
-          variant="outline"
-          className="h-11 w-full rounded-3xl text-sm font-bold"
-          onClick={() => setShowContactOptions((prev) => !prev)}
-        >
-          <Phone className="mr-2" size={20} /> 부모님께 연락하기
-        </Button>
-
-        {showContactOptions && (
-          <div className="rounded-3xl border border-slate-100 bg-white p-3 shadow-sm">
-            <p className="mb-2 text-sm font-black text-slate-700">연락할 사람을 선택하세요</p>
-            {contacts.length === 0 ? (
-              <p className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-500">설정에서 부모 연락처를 입력해주세요.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {contacts.map((parent) => (
-                  <React.Fragment key={parent.id || parent.label}>
-                    <a
-                      href={`tel:${parent.phone}`}
-                      className="flex h-12 items-center justify-center rounded-2xl bg-emerald-600 text-sm font-black text-white"
-                    >
-                      {parent.label || parent.name} 전화
-                    </a>
-                    <a
-                      href={`sms:${parent.phone}?body=${smsText}`}
-                      className="flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-700"
-                    >
-                      {parent.label || parent.name} 문자
-                    </a>
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      
-    </motion.div>
-  );
-}
-
-
-function ChildScheduleAddBox({
-  showAdd,
-  setShowAdd,
-  newSchedule,
-  updateNewSchedule,
-  addSchedule,
-  cancelScheduleForm,
-  selectedDateLabel,
-  child,
-  selectedDay,
-}) {
-  return (
-    <Card className="rounded-[2rem] border border-rose-100 bg-white/80 shadow-sm backdrop-blur">
-      <CardContent className="p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold text-rose-400">{selectedDateLabel}</p>
-            <p className="text-base font-black text-slate-900">{child.name} 일정 직접 추가</p>
-          </div>
-          <Button
-            size="sm"
-            variant={showAdd ? "secondary" : "default"}
-            className="rounded-2xl"
-            onClick={() => (showAdd ? cancelScheduleForm() : setShowAdd(true))}
-          >
-            {showAdd ? "접기" : "일정 추가"}
-          </Button>
-        </div>
-
-        {showAdd && (
-          <div className="space-y-2">
-            <input
-              value={newSchedule.title}
-              onChange={(e) => updateNewSchedule("title", e.target.value)}
-              placeholder="무슨 일정이야? 예: 영어, 친구 약속"
-              className="w-full rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="time"
-                value={newSchedule.start}
-                onChange={(e) => updateNewSchedule("start", e.target.value)}
-                className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
-              />
-              <input
-                type="time"
-                value={newSchedule.end}
-                onChange={(e) => updateNewSchedule("end", e.target.value)}
-                className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
-              />
-            </div>
-            <input
-              value={newSchedule.place}
-              onChange={(e) => updateNewSchedule("place", e.target.value)}
-              placeholder="어디에서 해? 예: 영어학원, 집"
-              className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300"
-            />
-            <input
-              value={newSchedule.items}
-              onChange={(e) => updateNewSchedule("items", e.target.value)}
-              placeholder="준비물 예: 교재, 필통, 물병"
-              className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300"
-            />
-            <select
-              value={newSchedule.repeatType || "once"}
-              onChange={(e) => updateNewSchedule("repeatType", e.target.value)}
-              className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-black text-slate-700 outline-none focus:border-rose-300"
-            >
-              <option value="once">한 번만</option>
-              <option value="daily">매일 반복</option>
-              <option value="weekly">매주 반복</option>
-              <option value="weekdays">월~금 반복</option>
-            </select>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" className="h-11 rounded-2xl" onClick={cancelScheduleForm}>
-                취소
-              </Button>
-              <Button className="h-11 rounded-2xl" onClick={addSchedule} disabled={!newSchedule.title.trim() || !newSchedule.start.trim()}>
-                저장
-              </Button>
-            </div>
-            <p className="rounded-2xl bg-orange-50 p-3 text-center text-xs font-bold text-orange-500">
-              {newSchedule.repeatType === "once" ? "달력에서 고른 날짜에 저장돼요." : `${getRepeatLabel(newSchedule.repeatType, selectedDay)} 일정으로 계속 표시돼요.`}
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ChildHopeQuote({ child, selectedDay }) {
-  const quote = getChildHopeQuote(child.id, selectedDay);
-
-  return (
-    <div className="rounded-[2rem] border border-rose-100 bg-white/75 p-4 text-center shadow-sm backdrop-blur">
-      <p className="text-xs font-bold text-rose-400">오늘의 용기 한마디</p>
-      <p className="mt-2 break-keep text-base font-black leading-7 text-slate-800">“{quote}”</p>
-      <p className="mt-2 text-xs font-bold text-slate-400">{child.name}이는 오늘도 충분히 멋져요 🌱</p>
-    </div>
-  );
-}
-
-function ParentView({
-  child,
-  selectedDay,
-  schedules,
-  hadSchedulesToday,
-  selectedDate,
-  upcomingSchedules,
-  onSelectUpcomingSchedule,
-  updateStatus,
-  showAdd,
-  setShowAdd,
-  newSchedule,
-  updateNewSchedule,
-  addSchedule,
-  startEditSchedule,
-  editingScheduleId,
-  cancelScheduleForm,
-  requestDeleteSchedule,
-  deleteTarget,
-  cancelDeleteSchedule,
-  confirmDeleteSchedule,
-  locationChecks,
-}) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-      <Card className="rounded-3xl border-0 bg-white shadow-lg">
-        <CardContent className="p-5">
-          <div className="mb-4">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm text-slate-500">부모 확인 화면</p>
-                <h2 className="text-2xl font-black">
-                  {child.name} {selectedDay}요일 일정
-                </h2>
-              </div>
-            </div>
-
-            <Button
-              className="h-12 w-full rounded-2xl text-sm font-black"
-              onClick={() => {
-                if (showAdd) {
-                  cancelScheduleForm();
-                } else {
-                  setShowAdd(true);
-                }
-              }}
-            >
-              <Plus size={18} className="mr-1" /> 일정 추가
-            </Button>
-          </div>
-
-          {upcomingSchedules?.length > 0 && (
-            <div className="mb-4 rounded-3xl border border-rose-100 bg-rose-50/70 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-black text-slate-900">앞으로 등록된 일정</p>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-rose-500 shadow-sm">
-                      오늘 이후 6일 일정이 나옵니다.
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xs font-bold text-rose-500">오늘 이후의 다음 일정만 보여줍니다.</p>
-                </div>
-                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
-                  {upcomingSchedules.length}개
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {upcomingSchedules.map((schedule) => (
-                  <div
-                    key={`${schedule.id}-${schedule.displayDateKey}`}
-                    className="rounded-2xl bg-white p-3 shadow-sm"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectUpcomingSchedule?.(schedule)}
-                      className="mb-2 flex w-full items-center justify-between gap-3 text-left"
-                    >
-                      <div className="min-w-0">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">
-                            {schedule.displayDate}
-                          </span>
-                          {getScheduleRepeatType(schedule) !== "once" && (
-                            <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-black text-orange-500">
-                              {getRepeatLabel(getScheduleRepeatType(schedule), schedule.day)}
-                            </span>
-                          )}
-                        </div>
-                        <p className="truncate text-sm font-black text-slate-900">{schedule.title}</p>
-                        <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
-                          {formatKoreanTimeRange(schedule.start, schedule.end)} · {schedule.place}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-400">
-                        보기
-                      </span>
-                    </button>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 bg-white text-emerald-700" onClick={() => startEditSchedule(schedule)}>
-                        <Pencil size={14} className="mr-1" /> 수정
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl border-red-200 bg-white text-red-600"
-                        onClick={() => requestDeleteSchedule(schedule, `${schedule.id}-${schedule.displayDateKey}`)}
-                      >
-                        <Trash2 size={14} className="mr-1" /> 삭제
-                      </Button>
-                    </div>
-                    {deleteTarget?.deleteKey === `${schedule.id}-${schedule.displayDateKey}` && (
-                      <DeleteConfirmBox
-                        schedule={deleteTarget}
-                        onCancel={cancelDeleteSchedule}
-                        onConfirm={confirmDeleteSchedule}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showAdd && (
-            <div className="mb-4 rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-emerald-700">{editingScheduleId ? "일정 수정" : "새 일정 추가"}</p>
-                  <p className="text-xs text-slate-500">
-                    {newSchedule.repeatType === "once"
-                      ? `${child.name} · 선택한 날짜의 ${selectedDay}요일 일정으로 저장됩니다.`
-                      : `${child.name} · ${getRepeatLabel(newSchedule.repeatType, selectedDay)} 일정으로 저장됩니다.`}
-                  </p>
-                </div>
-                <button onClick={cancelScheduleForm} className="rounded-full bg-white p-2 text-slate-500">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <input
-                  value={newSchedule.title}
-                  onChange={(e) => updateNewSchedule("title", e.target.value)}
-                  placeholder="과목명 예: 영어, 바둑, 파워점핑"
-                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="time"
-                    value={newSchedule.start}
-                    onChange={(e) => updateNewSchedule("start", e.target.value)}
-                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                  />
-                  <input
-                    type="time"
-                    value={newSchedule.end}
-                    onChange={(e) => updateNewSchedule("end", e.target.value)}
-                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                  />
-                </div>
-                <input
-                  value={newSchedule.place}
-                  onChange={(e) => updateNewSchedule("place", e.target.value)}
-                  placeholder="장소명 예: ○○영어학원"
-                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                />
-                <input
-                  value={newSchedule.transport}
-                  onChange={(e) => updateNewSchedule("transport", e.target.value)}
-                  placeholder="이동방법 예: 도보, 셔틀, 부모 차량"
-                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                />
-                <input
-                  value={newSchedule.items}
-                  onChange={(e) => updateNewSchedule("items", e.target.value)}
-                  placeholder="준비물 예: 교재, 필통, 물병"
-                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                />
-                <select
-                  value={newSchedule.alert}
-                  onChange={(e) => updateNewSchedule("alert", e.target.value)}
-                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400"
-                >
-                  <option>5분 전</option>
-                  <option>10분 전</option>
-                  <option>15분 전</option>
-                  <option>20분 전</option>
-                  <option>30분 전</option>
-                </select>
-                <select
-                  value={newSchedule.repeatType || "once"}
-                  onChange={(e) => updateNewSchedule("repeatType", e.target.value)}
-                  className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-black text-slate-700 outline-none focus:border-emerald-400"
-                >
-                  <option value="once">한 번만</option>
-                  <option value="daily">매일 반복</option>
-                  <option value="weekly">매주 반복</option>
-                  <option value="weekdays">월~금 반복</option>
-                </select>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={cancelScheduleForm} className="h-12 rounded-2xl font-black">
-                  취소
-                </Button>
-                <Button onClick={addSchedule} className="h-12 rounded-2xl font-black" disabled={!newSchedule.title.trim() || !newSchedule.start.trim()}>
-                  <Save size={18} className="mr-2" /> {editingScheduleId ? "수정 저장" : "일정 저장"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {schedules.length === 0 && (
-              <NoParentScheduleCard child={child} selectedDay={selectedDay} selectedDate={selectedDate} hadSchedulesToday={hadSchedulesToday} />
-            )}
-            {schedules.map((s) => (
-              <div key={s.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-black">{s.title}</p>
-                    <p className="text-sm text-slate-500">
-                      {formatKoreanTimeRange(s.start, s.end)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle[s.status] || "bg-slate-100 text-slate-700"}`}>
-                      {s.status}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => requestDeleteSchedule(s, `today-${s.id}`)}
-                      className="rounded-full bg-white p-2 text-red-400 shadow-sm hover:bg-red-50"
-                      title="일정 삭제"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-                {deleteTarget?.deleteKey === `today-${s.id}` && (
-                  <DeleteConfirmBox
-                    schedule={deleteTarget}
-                    onCancel={cancelDeleteSchedule}
-                    onConfirm={confirmDeleteSchedule}
-                  />
-                )}
-                <p className="mb-1 flex items-center gap-1 text-sm text-slate-700">
-                  <MapPin size={15} /> {s.place}
-                </p>
-                <p className="mb-2 text-sm text-slate-500">
-                  이동: {s.transport} · 준비물: {s.items}
-                </p>
-                {locationChecks?.[s.id] && (
-                  <p className="mb-3 rounded-2xl bg-cyan-50 p-2 text-xs font-bold text-cyan-700">
-                    위치 확인: {locationChecks[s.id].place || s.place} · {locationChecks[s.id].time} · 위치 상태: {getLocationAccuracyLabel(locationChecks[s.id].accuracy)}
-                  </p>
-                )}
-                <div className="mb-2 grid grid-cols-2 gap-2">
-                  <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => startEditSchedule(s)}>
-                    <Pencil size={14} className="mr-1" /> 수정
-                  </Button>
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "대기")}>
-                    대기 상태로
-                  </Button>
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "이동 중")}>
-                    이동
-                  </Button>
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "도착 완료")}>
-                    도착
-                  </Button>
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "끝남")}>
-                    끝남
-                  </Button>
-                  <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => updateStatus(s.id, "귀가 완료")}>
-                    귀가
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
   );
 }
 
@@ -3326,16 +2955,10 @@ function DeleteConfirmBox({ schedule, onCancel, onConfirm }) {
   return (
     <div className="mt-2 rounded-2xl border border-red-100 bg-red-50 p-3">
       <p className="text-sm font-black text-red-700">이 일정을 삭제할까요?</p>
-      <p className="mt-1 text-xs font-bold text-red-500">
-        {schedule.title} · {formatKoreanTime(schedule.start)}
-      </p>
+      <p className="mt-1 text-xs font-bold text-red-500">{schedule.title} · {formatKoreanTime(schedule.start)}</p>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Button variant="outline" className="rounded-2xl bg-white" onClick={onCancel}>
-          취소
-        </Button>
-        <Button variant="danger" className="rounded-2xl" onClick={onConfirm}>
-          삭제하기
-        </Button>
+        <Button variant="outline" className="rounded-2xl bg-white" onClick={onCancel}>취소</Button>
+        <Button variant="danger" className="rounded-2xl" onClick={onConfirm}>삭제하기</Button>
       </div>
     </div>
   );
@@ -3808,14 +3431,33 @@ function NotificationPanel({
   );
 }
 
+function MiniScheduleInfo({ icon, label, value, tone = "rose", compact = false }) {
+  const styles = {
+    amber: "border-amber-100 bg-amber-50/80 text-amber-600",
+    emerald: "border-emerald-100 bg-emerald-50/80 text-emerald-600",
+    violet: "border-violet-100 bg-violet-50/80 text-violet-600",
+    rose: "border-rose-100 bg-rose-50/80 text-rose-600",
+  };
+
+  return (
+    <div className={`rounded-[1.2rem] border text-center shadow-sm ${compact ? "px-2 py-1.5" : "px-2.5 py-2"} ${styles[tone] || styles.rose}`}>
+      <div className={`flex items-center justify-center gap-1 ${compact ? "mb-0.5" : "mb-1"}`}>
+        <span className={`${compact ? "text-base" : "text-xl"} leading-none`}>{icon}</span>
+        <span className="text-[10px] font-black text-slate-500">{label}</span>
+      </div>
+      <p className={`${compact ? "text-[12px]" : "text-sm"} truncate text-center font-black text-slate-900`}>{value}</p>
+    </div>
+  );
+}
+
 function InfoBox({ icon, label, value, compact = false, highlight = false }) {
   return (
-    <div className={`rounded-2xl ${highlight ? "border border-rose-100 bg-rose-50" : "bg-orange-50/70"} ${compact ? "p-2.5" : "p-3"}`}>
+    <div className={`rounded-2xl ${highlight ? "border border-rose-100 bg-rose-50" : "bg-orange-50/70"} ${compact ? "p-2" : "p-3"}`}>
       <div className={`mb-0.5 flex items-center gap-1 ${highlight ? "text-rose-400" : "text-slate-400"}`}>
         {icon}
         <span className="text-[10px] font-bold">{label}</span>
       </div>
-      <p className={`break-keep font-black ${highlight ? "text-rose-700" : "text-slate-800"} ${compact ? "text-[13px]" : "text-base"}`}>{value}</p>
+      <p className={`truncate font-black ${highlight ? "text-rose-700" : "text-slate-800"} ${compact ? "text-[12px]" : "text-base"}`}>{value}</p>
     </div>
   );
 }
