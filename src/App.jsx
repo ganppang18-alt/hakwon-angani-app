@@ -449,6 +449,61 @@ function getNoScheduleDescription(date) {
   return "지난 일정은 홈 화면에서 숨기고, 오늘 할 일에 집중해요.";
 }
 
+function isPastDate(date) {
+  const target = new Date(date);
+  const today = new Date();
+  target.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return target.getTime() < today.getTime();
+}
+
+function getParentPastPraise(childName, selectedDay) {
+  const name = childName || "우리 아이";
+  const messages = {
+    월: {
+      title: "월요일도 씩씩하게 잘 해냈어",
+      desc: `한 주의 시작을 보낸 ${name}에게 따뜻한 칭찬을 전해주세요. 월요일을 잘 지나온 것만으로도 충분히 멋진 일이에요.`,
+      quote: `“${name}아, 월요일을 씩씩하게 시작해줘서 고마워. 이번 주도 엄마 아빠가 늘 응원할게.”`,
+    },
+    화: {
+      title: "화요일도 차근차근 잘했어",
+      desc: `${name}가 하루를 차근차근 보내온 것을 기억해주세요. 작은 노력도 부모님의 칭찬을 받을 만큼 소중합니다.`,
+      quote: `“${name}아, 오늘도 하나씩 해낸 네 모습이 정말 자랑스러워.”`,
+    },
+    수: {
+      title: "수요일까지 정말 잘 달려왔어",
+      desc: `한 주의 중간까지 온 ${name}에게 잠깐 쉬어가도 괜찮다는 말을 전해주세요.`,
+      quote: `“${name}아, 벌써 한 주의 중간까지 왔네. 지치지 않고 해낸 네가 참 대견해.”`,
+    },
+    목: {
+      title: "목요일도 포기하지 않고 잘했어",
+      desc: `${name}가 지칠 수 있는 날에도 자기 할 일을 해낸 점을 칭찬해주세요.`,
+      quote: `“${name}아, 힘들어도 포기하지 않고 해낸 오늘의 네가 정말 멋져.”`,
+    },
+    금: {
+      title: "금요일까지 멋지게 해냈어",
+      desc: `한 주를 잘 마무리해가는 ${name}에게 충분한 인정과 격려를 전해주세요.`,
+      quote: `“${name}아, 이번 주도 정말 수고 많았어. 오늘의 너는 충분히 칭찬받아도 돼.”`,
+    },
+    토: {
+      title: "토요일도 알차게 잘 보냈어",
+      desc: `쉬는 날에도 자기만의 시간을 보낸 ${name}에게 따뜻한 말을 남겨주세요.`,
+      quote: `“${name}아, 오늘 하루도 너답게 잘 보내줘서 고마워. 편안하게 쉬어도 괜찮아.”`,
+    },
+    일: {
+      title: "일요일은 마음을 채우는 날이야",
+      desc: `새로운 한 주를 앞둔 ${name}에게 안심과 사랑을 전해주세요.`,
+      quote: `“${name}아, 이번 주도 잘 지내줘서 고마워. 내일도 천천히, 너답게 시작하면 돼.”`,
+    },
+  };
+
+  return messages[selectedDay] || {
+    title: "오늘 하루도 정말 잘했어",
+    desc: `${name}에게 따뜻한 칭찬 한마디를 남겨주세요. 지난 하루를 잘 보낸 것만으로도 충분히 멋진 일이에요.`,
+    quote: `“${name}아, 오늘도 열심히 해줘서 고마워. 너의 하루를 엄마 아빠가 늘 응원해.”`,
+  };
+}
+
 function isScheduleForSelectedDate(schedule, selectedDay, selectedDateKey) {
   if (schedule.dateKey) return schedule.dateKey === selectedDateKey;
   return schedule.day === selectedDay;
@@ -2988,6 +3043,29 @@ function ParentView({
 
 function NoParentScheduleCard({ child, selectedDay, selectedDate, hadSchedulesToday }) {
   const reminders = getParentFamilyReminders(child.id, selectedDay);
+  const isPast = isPastDate(selectedDate);
+  const praise = getParentPastPraise(child.name, selectedDay);
+
+  if (isPast) {
+    return (
+      <div className="rounded-[2rem] border border-rose-100 bg-gradient-to-br from-rose-50 via-orange-50 to-white p-5 text-center">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white text-2xl shadow-sm">
+          💗
+        </div>
+        <p className="text-xs font-bold text-rose-400">
+          {child.name} · {selectedDay}요일
+        </p>
+        <p className="mt-2 text-2xl font-black text-slate-900">{praise.title}</p>
+        <p className="mt-2 break-keep text-sm leading-6 text-slate-500">{praise.desc}</p>
+        <div className="mt-4 rounded-3xl bg-white/80 p-4 text-center shadow-sm">
+          <p className="break-keep text-base font-black leading-7 text-rose-600">{praise.quote}</p>
+        </div>
+        <p className="mt-3 text-xs font-bold text-slate-400">
+          지나간 일정은 숨기고, 아이에게 남길 따뜻한 말만 보여줍니다.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-[2rem] border border-rose-100 bg-gradient-to-br from-rose-50 via-orange-50 to-white p-4">
