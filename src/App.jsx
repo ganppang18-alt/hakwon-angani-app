@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 
+const appFontFamily = "Jua, ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+
 function cn(...classes) {
   return classes.filter(Boolean).join(" ");
 }
@@ -67,10 +69,18 @@ function Button({ className = "", variant = "default", size = "default", disable
   );
 }
 
-const children = [
-  { id: "donghun", name: "동훈", grade: "초5" },
-  { id: "dongjun", name: "동준", grade: "초3" },
-];
+const defaultFamilyInfo = {
+  parents: [
+    { id: "dad", label: "아빠", name: "아빠", phone: "01088337590" },
+    { id: "mom", label: "엄마", name: "엄마", phone: "01027460913" },
+  ],
+  children: [
+    { id: "donghun", name: "동훈", grade: "초5", phone: "", avatarTheme: "rose" },
+    { id: "dongjun", name: "동준", grade: "초3", phone: "", avatarTheme: "sky" },
+  ],
+};
+
+const children = defaultFamilyInfo.children;
 
 const defaultSchedules = [
   {
@@ -317,15 +327,45 @@ const days = ["월", "화", "수", "목", "금", "토", "일"];
 // 예: "https://hakwon-angani-default-rtdb.asia-southeast1.firebasedatabase.app"
 // 주소를 비워두면 기존처럼 각 휴대폰에만 저장됩니다.
 const FIREBASE_DATABASE_URL = "https://hakwon-angani-default-rtdb.firebaseio.com";
-const FAMILY_SHARE_CODE = "han-family";
+const DEFAULT_FAMILY_SHARE_CODE = "han-family";
 
 function isCloudSyncEnabled() {
   return FIREBASE_DATABASE_URL.trim().length > 0;
 }
 
-function getCloudUrl() {
-  const baseUrl = FIREBASE_DATABASE_URL.replace(/\/$/, "");
-  return `${baseUrl}/families/${FAMILY_SHARE_CODE}.json`;
+function getCloudUrl(familyShareCode = DEFAULT_FAMILY_SHARE_CODE) {
+  const baseUrl = FIREBASE_DATABASE_URL.endsWith("/") ? FIREBASE_DATABASE_URL.slice(0, -1) : FIREBASE_DATABASE_URL;
+  const safeCode = encodeURIComponent(String(familyShareCode || DEFAULT_FAMILY_SHARE_CODE).trim());
+  return baseUrl + "/families/" + safeCode + ".json";
+}
+
+function normalizeFamilyCode(value) {
+  const raw = String(value || "").trim().split(" ").filter(Boolean).join("-");
+  const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허고노도로모보소오조초코토포호구누두루무부수우주추쿠투푸후그느드르므브스으즈츠크트프흐기니디리미비시이지치키티피히_-";
+  return raw
+    .split("")
+    .filter((char) => allowed.includes(char))
+    .join("")
+    .slice(0, 30);
+}
+
+function loadSavedFamilyShareCode() {
+  try {
+    if (typeof localStorage === "undefined") return DEFAULT_FAMILY_SHARE_CODE;
+    return localStorage.getItem("hakwonFamilyShareCode") || DEFAULT_FAMILY_SHARE_CODE;
+  } catch {
+    return DEFAULT_FAMILY_SHARE_CODE;
+  }
+}
+
+function saveFamilyShareCodeToStorage(code) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonFamilyShareCode", code);
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
 }
 
 function timeToMinutes(time) {
@@ -435,6 +475,26 @@ function loadSavedAlertSetting() {
   }
 }
 
+function loadSavedNotificationEnabled() {
+  try {
+    if (typeof localStorage === "undefined") return true;
+    const saved = localStorage.getItem("hakwonNotificationEnabled");
+    return saved === null ? true : saved === "true";
+  } catch {
+    return true;
+  }
+}
+
+function saveNotificationEnabledToStorage(enabled) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonNotificationEnabled", String(enabled));
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
+}
+
 function saveAlertSettingToStorage(alertTime) {
   try {
     if (typeof localStorage !== "undefined") {
@@ -472,6 +532,31 @@ function loadSavedParentSecurity() {
     return saved ? JSON.parse(saved) : { password: "", lockEnabled: false };
   } catch {
     return { password: "", lockEnabled: false };
+  }
+}
+
+function loadSavedFamilyInfo() {
+  try {
+    if (typeof localStorage === "undefined") return defaultFamilyInfo;
+    const saved = localStorage.getItem("hakwonFamilyInfo");
+    if (!saved) return defaultFamilyInfo;
+    const parsed = JSON.parse(saved);
+    return {
+      parents: parsed.parents?.length ? parsed.parents : defaultFamilyInfo.parents,
+      children: parsed.children?.length ? parsed.children : defaultFamilyInfo.children,
+    };
+  } catch {
+    return defaultFamilyInfo;
+  }
+}
+
+function saveFamilyInfoToStorage(familyInfo) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonFamilyInfo", JSON.stringify(familyInfo));
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
   }
 }
 
@@ -525,16 +610,16 @@ function saveHomeworkToStorage(homework) {
   }
 }
 
-async function loadCloudFamilyData() {
+async function loadCloudFamilyData(familyShareCode) {
   if (!isCloudSyncEnabled()) return null;
-  const response = await fetch(getCloudUrl());
+  const response = await fetch(getCloudUrl(familyShareCode));
   if (!response.ok) throw new Error("cloud-load-failed");
   return response.json();
 }
 
-async function saveCloudFamilyData(data) {
+async function saveCloudFamilyData(data, familyShareCode) {
   if (!isCloudSyncEnabled()) return;
-  const response = await fetch(getCloudUrl(), {
+  const response = await fetch(getCloudUrl(familyShareCode), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...data, updatedAt: new Date().toISOString() }),
@@ -670,12 +755,22 @@ if (typeof window !== "undefined" && !window.__HAKWON_SELF_TESTED__) {
 }
 
 export default function App() {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.getElementById("hakwon-jua-font")) return;
+    const link = document.createElement("link");
+    link.id = "hakwon-jua-font";
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Jua&display=swap";
+    document.head.appendChild(link);
+  }, []);
   const [role, setRole] = useState("child");
   const [selectedChild, setSelectedChild] = useState("donghun");
   const [schedules, setSchedules] = useState(loadSavedSchedules);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedDay, setSelectedDay] = useState(getTodayKoreanDay());
   const [defaultAlertTime, setDefaultAlertTime] = useState(loadSavedAlertSetting);
+  const [notificationEnabled, setNotificationEnabled] = useState(loadSavedNotificationEnabled);
   const emptyScheduleForm = {
     title: "",
     place: "",
@@ -695,9 +790,13 @@ export default function App() {
   const [sentAlertIds, setSentAlertIds] = useState([]);
   const [appAlerts, setAppAlerts] = useState([]);
   const [urgentAlert, setUrgentAlert] = useState(null);
+  const [statusConfirm, setStatusConfirm] = useState(null);
   const [locationChecks, setLocationChecks] = useState(loadSavedLocationChecks);
   const [parentSecurity, setParentSecurity] = useState(loadSavedParentSecurity);
   const [parentAuthenticated, setParentAuthenticated] = useState(false);
+  const [familyInfo, setFamilyInfo] = useState(loadSavedFamilyInfo);
+  const [familyShareCode, setFamilyShareCode] = useState(loadSavedFamilyShareCode);
+  const [familyCodeInput, setFamilyCodeInput] = useState(loadSavedFamilyShareCode);
   const [homework, setHomework] = useState(loadSavedHomework);
   const [newHomeworkText, setNewHomeworkText] = useState("");
   const [notices, setNotices] = useState(loadSavedNotices);
@@ -724,12 +823,24 @@ export default function App() {
   }, [defaultAlertTime]);
 
   useEffect(() => {
+    saveNotificationEnabledToStorage(notificationEnabled);
+  }, [notificationEnabled]);
+
+  useEffect(() => {
     saveLocationChecksToStorage(locationChecks);
   }, [locationChecks]);
 
   useEffect(() => {
     saveParentSecurityToStorage(parentSecurity);
   }, [parentSecurity]);
+
+  useEffect(() => {
+    saveFamilyInfoToStorage(familyInfo);
+  }, [familyInfo]);
+
+  useEffect(() => {
+    saveFamilyShareCodeToStorage(familyShareCode);
+  }, [familyShareCode]);
 
   useEffect(() => {
     saveHomeworkToStorage(homework);
@@ -746,12 +857,14 @@ export default function App() {
     const loadSharedData = async () => {
       try {
         setSyncStatus("가족 일정 불러오는 중");
-        const data = await loadCloudFamilyData();
+        const data = await loadCloudFamilyData(familyShareCode);
         if (cancelled) return;
         if (data?.schedules) setSchedules(data.schedules);
         if (data?.locationChecks) setLocationChecks(data.locationChecks);
         if (data?.defaultAlertTime) setDefaultAlertTime(data.defaultAlertTime);
+        if (typeof data?.notificationEnabled === "boolean") setNotificationEnabled(data.notificationEnabled);
         if (data?.parentSecurity) setParentSecurity(data.parentSecurity);
+        if (data?.familyInfo) setFamilyInfo(data.familyInfo);
         if (data?.homework) setHomework(data.homework);
         if (data?.notices) setNotices(data.notices);
         setSyncStatus("가족 공유 중");
@@ -769,14 +882,14 @@ export default function App() {
       cancelled = true;
       clearInterval(poller);
     };
-  }, []);
+  }, [familyShareCode]);
 
   useEffect(() => {
     if (!isCloudSyncEnabled() || !cloudLoaded) return;
 
     const timer = setTimeout(async () => {
       try {
-        await saveCloudFamilyData({ schedules, locationChecks, defaultAlertTime, parentSecurity, homework, notices });
+        await saveCloudFamilyData({ schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, notices, familyShareCode }, familyShareCode);
         setSyncStatus("가족 공유 중");
       } catch {
         setSyncStatus("공유 저장 실패 · 다시 시도 필요");
@@ -784,8 +897,18 @@ export default function App() {
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [schedules, locationChecks, defaultAlertTime, parentSecurity, homework, notices, cloudLoaded]);
+  }, [schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, notices, familyShareCode, cloudLoaded]);
 
+  const applyFamilyShareCode = () => {
+    const normalized = normalizeFamilyCode(familyCodeInput) || DEFAULT_FAMILY_SHARE_CODE;
+    setFamilyCodeInput(normalized);
+    setFamilyShareCode(normalized);
+    setCloudLoaded(false);
+    setSyncStatus(isCloudSyncEnabled() ? "가족 공유방 이동 중" : "기기 저장 모드");
+  };
+
+  const appChildren = familyInfo.children?.length ? familyInfo.children : defaultFamilyInfo.children;
+  const parentContacts = familyInfo.parents?.length ? familyInfo.parents : defaultFamilyInfo.parents;
   const isParentLockActive = parentSecurity.lockEnabled && parentSecurity.password;
 
   const saveParentPassword = (password) => {
@@ -894,7 +1017,7 @@ export default function App() {
     setHomework((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const child = children.find((c) => c.id === selectedChild);
+  const child = appChildren.find((c) => c.id === selectedChild) || appChildren[0] || defaultFamilyInfo.children[0];
   const selectedDateKey = useMemo(() => getDateKey(selectedDate), [selectedDate]);
 
   const todaySchedules = useMemo(
@@ -905,14 +1028,22 @@ export default function App() {
     [schedules, selectedChild, selectedDay, selectedDateKey]
   );
 
+  const visibleSchedules = useMemo(() => {
+    const nowMinutes = getNowMinutes(new Date(nowTick));
+    return todaySchedules.filter((s) => {
+      if (["끝남", "귀가 완료"].includes(s.status)) return false;
+      return timeToMinutes(s.end || s.start) >= nowMinutes;
+    });
+  }, [todaySchedules, nowTick]);
+
   const current = useMemo(
-    () => getCurrentSchedule(todaySchedules, selectedChild, selectedDay),
-    [todaySchedules, selectedChild, selectedDay, nowTick]
+    () => getCurrentSchedule(visibleSchedules, selectedChild, selectedDay),
+    [visibleSchedules, selectedChild, selectedDay, nowTick]
   );
 
   const activeAlerts = useMemo(
-    () => getActiveAlerts(todaySchedules, selectedChild, selectedDay),
-    [todaySchedules, selectedChild, selectedDay, nowTick]
+    () => getActiveAlerts(visibleSchedules, selectedChild, selectedDay),
+    [visibleSchedules, selectedChild, selectedDay, nowTick]
   );
   const todayHomework = useMemo(
     () => homework.filter((item) => item.childId === selectedChild && item.day === selectedDay),
@@ -927,11 +1058,12 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!notificationEnabled) return;
     activeAlerts.forEach((alert) => {
       const alertId = `${alert.id}-${alert.day}-${alert.start}`;
       if (sentAlertIds.includes(alertId)) return;
 
-      const childName = children.find((c) => c.id === alert.childId)?.name || "아이";
+      const childName = appChildren.find((c) => c.id === alert.childId)?.name || "아이";
       const title = `${childName}, ${alert.title} 갈 시간이에요`;
       const body = `${alert.start} 시작 · 장소: ${alert.place}`;
 
@@ -975,7 +1107,7 @@ export default function App() {
 
       setSentAlertIds((prev) => [...prev, alertId]);
     });
-  }, [activeAlerts, notificationPermission, sentAlertIds]);
+  }, [activeAlerts, notificationPermission, sentAlertIds, notificationEnabled]);
 
   const requestNotificationPermission = async () => {
     try {
@@ -991,6 +1123,19 @@ export default function App() {
   };
 
   const testNotification = () => {
+    if (!notificationEnabled) {
+      setAppAlerts((prev) => [
+        {
+          id: `test-off-${Date.now()}`,
+          title: "앱 알림이 꺼져 있어요",
+          body: "알림 현재상태에서 앱 알림을 ON으로 바꾸면 테스트할 수 있습니다.",
+          time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+        },
+        ...prev,
+      ].slice(0, 5));
+      return;
+    }
+
     const childName = child?.name || "아이";
     const title = `${childName}, 다음 일정 확인해요`;
     const body = current ? `${current.title} · ${current.start} · ${current.place}` : "오늘은 등록된 일정이 없습니다.";
@@ -1036,7 +1181,25 @@ export default function App() {
   };
 
   const updateStatus = (id, status) => {
+    const targetSchedule = schedules.find((s) => s.id === id);
     setSchedules((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
+
+    const statusMessage = {
+      "도착 완료": "도착 확인이 부모님 화면에 표시됩니다.",
+      끝남: "수업이 끝난 것으로 확인됐어요.",
+      "귀가 완료": "집에 온 것으로 확인됐어요.",
+      "위치 확인": "위치 확인 상태로 저장됐어요.",
+      "이동 중": "이동 중으로 저장됐어요.",
+      대기: "대기 상태로 바뀌었어요.",
+    }[status] || "상태가 저장됐어요.";
+
+    setStatusConfirm({
+      id: Date.now(),
+      title: status,
+      body: targetSchedule ? `${targetSchedule.title} · ${statusMessage}` : statusMessage,
+    });
+
+    setTimeout(() => setStatusConfirm(null), 2200);
   };
 
   const saveLocationCheck = (scheduleId, locationData) => {
@@ -1068,8 +1231,6 @@ export default function App() {
     const scheduleData = {
       childId: selectedChild,
       day: selectedDay,
-      dateKey: selectedDateKey,
-      dateLabel: getTodayDateLabel(selectedDate),
       dateKey: selectedDateKey,
       dateLabel: getTodayDateLabel(selectedDate),
       title: newSchedule.title.trim(),
@@ -1167,25 +1328,32 @@ export default function App() {
       <div className="pointer-events-none absolute left-6 top-[430px] text-4xl opacity-[0.05]">🏠</div>
       <div className="pointer-events-none absolute bottom-10 right-10 text-5xl opacity-[0.05]">🎒</div>
       {urgentAlert && <UrgentAlertOverlay alert={urgentAlert} onClose={() => setUrgentAlert(null)} />}
+      {statusConfirm && <StatusConfirmToast confirm={statusConfirm} onClose={() => setStatusConfirm(null)} />}
 
       <div className="relative z-10 mx-auto max-w-md px-3 py-3">
-        <header className="mb-3 flex items-start justify-between gap-2 rounded-3xl bg-white/70 p-3 shadow-sm backdrop-blur">
-          <div>
-            <p className="text-xs font-bold text-rose-400">초등학생 동선 알림앱</p>
-            <h1 className="flex items-center text-2xl font-black tracking-tight text-slate-900">
-              <span className="relative mr-2 inline-flex h-9 w-8 items-end justify-center text-3xl leading-none">
-                <span className="absolute -top-1 left-0 text-[10px] leading-none">💗</span>
-                <span className="absolute -top-2 right-0 text-[10px] leading-none">💗</span>
-                <span>👩</span>
-              </span>
-              학원 안가니?
-              <span className="relative ml-2 inline-flex h-9 w-8 items-end justify-center text-3xl leading-none">
-                <span className="absolute -top-1 left-0 text-[10px] leading-none">💙</span>
-                <span className="absolute -top-2 right-0 text-[10px] leading-none">💙</span>
-                <span>👨</span>
-              </span>
-            </h1>
-          </div>
+        <header className="mb-3 rounded-[2rem] border border-white/70 bg-white/75 p-4 shadow-[0_12px_35px_rgba(244,114,182,0.12)] backdrop-blur">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50/80 px-3 py-1 text-[11px] font-black text-rose-500 shadow-sm" style={{ fontFamily: appFontFamily }}>
+                <CalendarDays size={13} /> 초등학생 동선 알림앱 <span className="text-rose-400">♥</span>
+              </div>
+
+              <div className="relative inline-block">
+                <div className="absolute -left-1 -top-1 h-3 w-3 rounded-full bg-rose-300/45 blur-[1px]" />
+                <div className="absolute -right-2 bottom-1 h-2.5 w-2.5 rounded-full bg-amber-300/55 blur-[1px]" />
+                <h1
+                  className="relative text-[44px] font-black leading-none text-slate-950"
+                  style={{
+                    fontFamily: appFontFamily,
+                    letterSpacing: "-0.045em",
+                    textShadow: "2px 3px 0 rgba(244, 114, 182, 0.20), 0 2px 12px rgba(15,23,42,0.08)",
+                  }}
+                >
+                  학원안가니?
+                </h1>
+                <div className="mt-2 h-1.5 w-24 rounded-full bg-gradient-to-r from-rose-400 via-pink-300 to-orange-200 shadow-sm" />
+              </div>
+            </div>
 
           <div className="mt-0 flex shrink-0 flex-col items-end gap-1.5">
             <p className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-400 shadow-sm">
@@ -1216,24 +1384,43 @@ export default function App() {
             </button>
             </div>
           </div>
+        </div>
         </header>
 
         <div className="mb-2 grid grid-cols-2 gap-2">
-          {children.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedChild(c.id)}
-              className={`rounded-2xl border p-3 text-left shadow-sm transition ${
-                selectedChild === c.id ? "border-rose-300 bg-rose-100" : "border-rose-100 bg-white/80"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <UserRound size={18} />
-                <span className="font-bold">{c.name}</span>
-                <span className="text-xs text-slate-500">{c.grade}</span>
-              </div>
-            </button>
-          ))}
+          {appChildren.map((c) => {
+            const isSelected = selectedChild === c.id;
+
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedChild(c.id)}
+                className={`relative overflow-hidden rounded-[24px] px-4 py-3 text-left transition-all duration-200 ${
+                  isSelected
+                    ? "border-2 border-rose-400 bg-gradient-to-r from-rose-50 via-pink-50 to-white shadow-[0_10px_28px_rgba(244,114,182,0.24)]"
+                    : "border border-rose-100 bg-white/90 shadow-sm hover:border-rose-200 hover:bg-rose-50/40"
+                }`}
+              >
+                {isSelected && (
+                  <span className="absolute bottom-0 left-0 h-1.5 w-full bg-gradient-to-r from-rose-400 via-pink-300 to-orange-200" />
+                )}
+
+                <div className="flex items-center gap-3">
+                  <ChildAvatar child={c} />
+                  <div className="flex flex-col" style={{ fontFamily: appFontFamily }}>
+                    <div className="flex items-baseline gap-2">
+                      <span className={`text-lg font-black ${isSelected ? "text-slate-950" : "text-slate-800"}`}>{c.name}</span>
+                      <span className={`text-xs font-bold ${isSelected ? "text-rose-500" : "text-slate-400"}`}>{c.grade}</span>
+                    </div>
+                    <span className={`mt-1 text-xs font-bold ${isSelected ? "text-rose-500" : "text-slate-300"}`}>
+                      {isSelected ? "현재 선택됨" : "눌러서 일정 보기"}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         <TodayDateBadge todayDateLabel={todayDateLabel} onClick={() => setShowCalendar((prev) => !prev)} />
@@ -1269,9 +1456,11 @@ export default function App() {
               current={current}
               selectedDay={selectedDay}
               updateStatus={updateStatus}
-              schedules={todaySchedules}
+              schedules={visibleSchedules}
+              hadSchedulesToday={todaySchedules.length > 0}
               locationChecks={locationChecks}
               saveLocationCheck={saveLocationCheck}
+              parentContacts={parentContacts}
               showAdd={showAdd}
               setShowAdd={setShowAdd}
               newSchedule={newSchedule}
@@ -1286,7 +1475,8 @@ export default function App() {
             <ParentView
               child={child}
               selectedDay={selectedDay}
-              schedules={todaySchedules}
+              schedules={visibleSchedules}
+              hadSchedulesToday={todaySchedules.length > 0}
               updateStatus={updateStatus}
               showAdd={showAdd}
               setShowAdd={setShowAdd}
@@ -1327,6 +1517,8 @@ export default function App() {
             onTest={testNotification}
             onClear={clearAppAlerts}
             onReset={resetSchedules}
+            notificationEnabled={notificationEnabled}
+            setNotificationEnabled={setNotificationEnabled}
             notices={notices}
             newNotice={newNotice}
             setNewNotice={setNewNotice}
@@ -1346,9 +1538,41 @@ export default function App() {
             parentSecurity={parentSecurity}
             onSaveParentPassword={saveParentPassword}
             onToggleParentLock={toggleParentLock}
+            familyInfo={familyInfo}
+            setFamilyInfo={setFamilyInfo}
+            familyShareCode={familyShareCode}
+            familyCodeInput={familyCodeInput}
+            setFamilyCodeInput={setFamilyCodeInput}
+            onApplyFamilyShareCode={applyFamilyShareCode}
+            role={role}
           />
         )}
       </div>
+    </div>
+  );
+}
+
+function StatusConfirmToast({ confirm, onClose }) {
+  return (
+    <div className="fixed left-0 right-0 top-5 z-[60] flex justify-center px-4">
+      <motion.div
+        initial={{ opacity: 0, y: -18, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="w-full max-w-sm rounded-3xl border-2 border-emerald-300 bg-white p-4 text-slate-900 shadow-xl"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 shadow-sm">
+            <CheckCircle2 size={22} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-black">{confirm.title}</p>
+            <p className="mt-1 break-keep text-sm font-bold leading-5 text-slate-700">{confirm.body}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full bg-slate-100 p-1 text-slate-500">
+            <X size={16} />
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -1381,6 +1605,66 @@ function UrgentAlertOverlay({ alert, onClose }) {
           확인했어요
         </Button>
       </motion.div>
+    </div>
+  );
+}
+
+function ChildAvatar({ child }) {
+  const isDonghun = child.avatarTheme === "rose";
+  const bg1 = isDonghun ? "#FFE4E6" : "#DBEAFE";
+  const bg2 = isDonghun ? "#FED7AA" : "#CCFBF1";
+  const shirt = isDonghun ? "#FB7185" : "#38BDF8";
+  const shirtDark = isDonghun ? "#E11D48" : "#0284C7";
+  const hair = isDonghun ? "#6B3F24" : "#7C4A1D";
+  const cheek = isDonghun ? "#FDA4AF" : "#FDBA74";
+
+  return (
+    <div className="h-12 w-12 overflow-hidden rounded-full bg-white shadow-sm ring-2 ring-white">
+      <svg viewBox="0 0 96 96" className="h-full w-full" role="img" aria-label={`${child.name} 아바타`}>
+        <defs>
+          <linearGradient id={`avatar-bg-${child.id}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={bg1} />
+            <stop offset="100%" stopColor={bg2} />
+          </linearGradient>
+          <linearGradient id={`avatar-shirt-${child.id}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={shirt} />
+            <stop offset="100%" stopColor={shirtDark} />
+          </linearGradient>
+          <filter id={`avatar-soft-${child.id}`} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.12" />
+          </filter>
+        </defs>
+
+        <rect width="96" height="96" rx="48" fill={`url(#avatar-bg-${child.id})`} />
+        <circle cx="25" cy="22" r="12" fill="rgba(255,255,255,0.45)" />
+        <circle cx="74" cy="24" r="9" fill="rgba(255,255,255,0.32)" />
+
+        <g filter={`url(#avatar-soft-${child.id})`}>
+          <path d="M23 89c3-18 14-28 25-28s22 10 25 28H23z" fill={`url(#avatar-shirt-${child.id})`} />
+          <path d="M34 66c4 7 24 7 28 0v13c-6 5-22 5-28 0V66z" fill="#F2B47D" />
+          <ellipse cx="48" cy="43" rx="23" ry="25" fill="#F6C28B" />
+
+          {isDonghun ? (
+            <>
+              <path d="M25 39c0-16 10-26 24-26 13 0 23 8 24 23-9-6-20-7-31-3-7 3-12 6-17 6z" fill={hair} />
+              <path d="M31 28c7-11 24-12 35-3-3-9-13-15-26-13-10 2-17 8-19 18 3-1 6-2 10-2z" fill="#8B5A2B" opacity="0.85" />
+            </>
+          ) : (
+            <>
+              <path d="M24 38c2-17 13-27 27-25 13 1 22 11 21 26-8-7-17-9-28-6-9 2-14 6-20 5z" fill={hair} />
+              <path d="M30 30c6-10 20-14 34-4-5-10-20-14-31-7-6 4-9 8-10 16 2-2 4-4 7-5z" fill="#A16207" opacity="0.7" />
+            </>
+          )}
+
+          <circle cx="37" cy="46" r="2.3" fill="#1F2937" />
+          <circle cx="59" cy="46" r="2.3" fill="#1F2937" />
+          <circle cx="31" cy="53" r="4" fill={cheek} opacity="0.65" />
+          <circle cx="65" cy="53" r="4" fill={cheek} opacity="0.65" />
+          <path d="M41 56c4 4 10 4 14 0" fill="none" stroke="#9F1239" strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M42 42c-3-2-7-2-10 0" stroke={hair} strokeWidth="2" strokeLinecap="round" opacity="0.35" />
+          <path d="M54 42c3-2 7-2 10 0" stroke={hair} strokeWidth="2" strokeLinecap="round" opacity="0.35" />
+        </g>
+      </svg>
     </div>
   );
 }
@@ -1670,7 +1954,7 @@ function HomeworkPanel({
 
           <div className="mt-3 rounded-3xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-500">
             {role === "child"
-              ? "작게 적고 하나씩 체크하면 어려운 숙제도 끝낼 수 있어요."
+              ? "하나씩 해내다 보면 오늘 숙제도 스스로 끝낼 수 있어요."
               : "아이가 스스로 적고 체크한 숙제를 함께 응원해주세요."}
           </div>
         </CardContent>
@@ -1688,10 +1972,58 @@ function WebAppGuidePanel({
   parentSecurity,
   onSaveParentPassword,
   onToggleParentLock,
+  familyInfo,
+  setFamilyInfo,
+  familyShareCode,
+  familyCodeInput,
+  setFamilyCodeInput,
+  onApplyFamilyShareCode,
+  role,
 }) {
+  const canEditSettings = role === "parent";
   const [selectedSetting, setSelectedSetting] = useState(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
+
+  const updateParentInfo = (index, field, value) => {
+    setFamilyInfo((prev) => ({
+      ...prev,
+      parents: prev.parents.map((parent, i) => (i === index ? { ...parent, [field]: value } : parent)),
+    }));
+  };
+
+  const updateChildInfo = (index, field, value) => {
+    setFamilyInfo((prev) => ({
+      ...prev,
+      children: prev.children.map((child, i) => (i === index ? { ...child, [field]: value } : child)),
+    }));
+  };
+
+  const addChildInfo = () => {
+    setFamilyInfo((prev) => ({
+      ...prev,
+      children: [
+        ...prev.children,
+        {
+          id: `child-${Date.now()}`,
+          name: "아이",
+          grade: "초등",
+          phone: "",
+          avatarTheme: prev.children.length % 2 === 0 ? "rose" : "sky",
+        },
+      ],
+    }));
+  };
+
+  const deleteChildInfo = (index) => {
+    setFamilyInfo((prev) => {
+      if ((prev.children || []).length <= 1) return prev;
+      return {
+        ...prev,
+        children: prev.children.filter((_, i) => i !== index),
+      };
+    });
+  };
 
   const handleSavePassword = () => {
     const ok = onSaveParentPassword(passwordInput);
@@ -1710,9 +2042,16 @@ function WebAppGuidePanel({
     {
       id: "profile",
       title: "내정보관리",
-      desc: "보호자와 아이 정보를 확인합니다.",
+      desc: "보호자와 아이 정보를 입력합니다.",
       icon: <UserCog size={20} />,
-      detail: "현재 등록된 아이: 동훈(초5), 동준(초3) · 보호자 연락처: 아빠, 엄마 등록 완료",
+      detail: "가족 정보를 입력하면 다른 가족도 이 앱을 바로 사용할 수 있습니다.",
+    },
+    {
+      id: "familyCode",
+      title: "가족코드 설정",
+      desc: "가족별 공유방을 만들거나 이동합니다.",
+      icon: <KeyRound size={20} />,
+      detail: "같은 가족코드를 입력한 휴대폰끼리만 일정과 공지사항이 공유됩니다.",
     },
     {
       id: "alarm",
@@ -1759,6 +2098,12 @@ function WebAppGuidePanel({
           </div>
         </div>
 
+        {role !== "parent" && (
+          <div className="mb-3 rounded-3xl border border-amber-100 bg-amber-50 p-3 text-sm font-bold leading-6 text-amber-700">
+            설정 내용은 확인만 할 수 있어요. 수정은 부모용 화면에서 가능합니다.
+          </div>
+        )}
+
         <div className="space-y-2">
           {settingItems.map((item) => (
             <div key={item.id}>
@@ -1785,6 +2130,7 @@ function WebAppGuidePanel({
                       <select
                         value={defaultAlertTime}
                         onChange={(e) => onDefaultAlertTimeChange(e.target.value)}
+                        disabled={!canEditSettings}
                         className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-emerald-400"
                       >
                         <option>5분 전</option>
@@ -1795,6 +2141,114 @@ function WebAppGuidePanel({
                       </select>
                       <p className="rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">
                         현재 기본 알림: {defaultAlertTime}
+                      </p>
+                    </div>
+                  ) : item.id === "familyCode" ? (
+                    <div className="space-y-3">
+                      <p>{item.detail}</p>
+                      <div className="rounded-2xl bg-rose-50 p-3 text-xs font-bold leading-5 text-rose-600">
+                        현재 가족코드: {familyShareCode}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          value={familyCodeInput}
+                          onChange={(e) => setFamilyCodeInput(e.target.value)}
+                          disabled={!canEditSettings}
+                          placeholder="예: 우리집, minjun-family"
+                          className="min-w-0 flex-1 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
+                        />
+                        <Button className="shrink-0 rounded-2xl" onClick={onApplyFamilyShareCode} disabled={!canEditSettings}>
+                          적용
+                        </Button>
+                      </div>
+                      <p className="rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">
+                        다른 가족이 이 앱을 쓰려면 자기 가족만의 코드를 입력하면 됩니다. 같은 코드를 입력한 사람끼리만 같은 데이터를 봅니다.
+                      </p>
+                    </div>
+                  ) : item.id === "profile" ? (
+                    <div className="space-y-4">
+                      <p>{item.detail}</p>
+
+                      <div className="rounded-3xl bg-rose-50 p-3">
+                        <p className="mb-2 text-sm font-black text-rose-600">부모 연락처</p>
+                        <div className="space-y-2">
+                          {(familyInfo?.parents || []).map((parent, index) => (
+                            <div key={parent.id || index} className="grid grid-cols-3 gap-2">
+                              <input
+                                value={parent.label || ""}
+                                onChange={(e) => updateParentInfo(index, "label", e.target.value)}
+                                disabled={!canEditSettings}
+                                placeholder="호칭"
+                                className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-rose-300"
+                              />
+                              <input
+                                value={parent.name || ""}
+                                onChange={(e) => updateParentInfo(index, "name", e.target.value)}
+                                disabled={!canEditSettings}
+                                placeholder="이름"
+                                className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300"
+                              />
+                              <input
+                                value={parent.phone || ""}
+                                onChange={(e) => updateParentInfo(index, "phone", e.target.value)}
+                                disabled={!canEditSettings}
+                                placeholder="연락처"
+                                className="rounded-2xl border border-rose-100 bg-white px-3 py-2 text-sm outline-none focus:border-rose-300"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl bg-orange-50 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-sm font-black text-orange-600">아이 정보</p>
+                          <Button size="sm" className="rounded-xl" onClick={addChildInfo} disabled={!canEditSettings}>
+                            <Plus size={14} className="mr-1" /> 아이 추가
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {(familyInfo?.children || []).map((child, index) => (
+                            <div key={child.id || index} className="rounded-3xl bg-white/70 p-2">
+                              <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                                <input
+                                  value={child.name || ""}
+                                  onChange={(e) => updateChildInfo(index, "name", e.target.value)}
+                                  disabled={!canEditSettings}
+                                  placeholder="아이 이름"
+                                  className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-orange-300"
+                                />
+                                <input
+                                  value={child.grade || ""}
+                                  onChange={(e) => updateChildInfo(index, "grade", e.target.value)}
+                                  disabled={!canEditSettings}
+                                  placeholder="학년 예: 초3"
+                                  className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => deleteChildInfo(index)}
+                                  disabled={!canEditSettings || (familyInfo?.children || []).length <= 1}
+                                  className="rounded-2xl border border-red-100 bg-white px-3 py-2 text-xs font-black text-red-400 transition hover:bg-red-50 disabled:opacity-30"
+                                  title="아이 정보 삭제"
+                                >
+                                  삭제
+                                </button>
+                              </div>
+                              <input
+                                value={child.phone || ""}
+                                onChange={(e) => updateChildInfo(index, "phone", e.target.value)}
+                                disabled={!canEditSettings}
+                                placeholder="아이 핸드폰 번호 예: 01012345678"
+                                className="mt-2 w-full rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">
+                        입력한 정보는 자동 저장됩니다. Firebase 가족 공유가 켜져 있으면 다른 휴대폰에도 같이 반영됩니다.
                       </p>
                     </div>
                   ) : item.id === "parentLock" ? (
@@ -1809,10 +2263,11 @@ function WebAppGuidePanel({
                           inputMode="numeric"
                           value={passwordInput}
                           onChange={(e) => setPasswordInput(e.target.value)}
+                          disabled={!canEditSettings}
                           placeholder="새 비밀번호 4자리 이상"
                           className="min-w-0 flex-1 rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
                         />
-                        <Button className="shrink-0 rounded-2xl" onClick={handleSavePassword}>
+                        <Button className="shrink-0 rounded-2xl" onClick={handleSavePassword} disabled={!canEditSettings}>
                           저장
                         </Button>
                       </div>
@@ -1821,6 +2276,7 @@ function WebAppGuidePanel({
                           variant={parentSecurity?.lockEnabled ? "secondary" : "outline"}
                           className="rounded-2xl"
                           onClick={() => handleToggleLock(true)}
+                          disabled={!canEditSettings}
                         >
                           <Lock size={16} className="mr-1" /> 잠금
                         </Button>
@@ -1828,6 +2284,7 @@ function WebAppGuidePanel({
                           variant={!parentSecurity?.lockEnabled ? "secondary" : "outline"}
                           className="rounded-2xl"
                           onClick={() => handleToggleLock(false)}
+                          disabled={!canEditSettings}
                         >
                           <Unlock size={16} className="mr-1" /> 해제
                         </Button>
@@ -1865,8 +2322,10 @@ function ChildView({
   selectedDay,
   updateStatus,
   schedules,
+  hadSchedulesToday,
   locationChecks,
   saveLocationCheck,
+  parentContacts,
   showAdd,
   setShowAdd,
   newSchedule,
@@ -1878,8 +2337,7 @@ function ChildView({
   const [showContactOptions, setShowContactOptions] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
-  const dadPhone = "01088337590";
-  const momPhone = "01027460913";
+  const contacts = parentContacts?.filter((parent) => parent.phone?.trim()) || [];
   const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
   const nextSchedule = getNextRemainingSchedule(schedules, getNowMinutes(), current?.id);
   const currentLocationCheck = current ? locationChecks?.[current.id] : null;
@@ -1923,6 +2381,7 @@ function ChildView({
 
   if (!current) {
     const activityTips = getMeaningfulActivities(child.id, selectedDay);
+    const finishedToday = hadSchedulesToday;
 
     return (
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
@@ -1934,9 +2393,13 @@ function ChildView({
             <p className="text-xs font-bold text-rose-400">
               {child.name} · {selectedDay}요일
             </p>
-            <h2 className="mt-2 text-2xl font-black text-slate-900">오늘은 여유 시간이 있어요</h2>
+            <h2 className="mt-2 text-2xl font-black text-slate-900">
+              {finishedToday ? "오늘 일정은 모두 지나갔어요" : "오늘은 여유 시간이 있어요"}
+            </h2>
             <p className="mt-2 break-keep text-sm leading-6 text-slate-500">
-              학원 일정이 없는 날에는 스스로 할 일을 하나 골라보면 멋져요.
+              {finishedToday
+                ? "지나간 일정은 홈 화면에서 숨기고, 남은 시간은 편안하게 정리해요."
+                : "학원 일정이 없는 날에는 스스로 할 일을 하나 골라보면 멋져요."}
             </p>
           </CardContent>
         </Card>
@@ -1952,31 +2415,46 @@ function ChildView({
           child={child}
         />
 
-        <Card className="rounded-[2rem] border border-orange-100 bg-white/90 shadow-md shadow-orange-100/60">
-          <CardContent className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-orange-400">오늘 스스로 해볼 일</p>
-                <p className="text-lg font-black text-slate-900">작은 실천 3가지</p>
+        {finishedToday ? (
+          <Card className="rounded-[2rem] border border-rose-100 bg-white/90 shadow-md shadow-rose-100/60">
+            <CardContent className="p-5 text-center">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-2xl shadow-sm">
+                🌙
               </div>
-              <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-500">혼자서도 OK</span>
-            </div>
-
-            <div className="space-y-2">
-              {activityTips.map((tip) => (
-                <div key={tip.title} className="flex items-center gap-3 rounded-3xl bg-orange-50/70 p-3 text-left">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm">
-                    {tip.icon}
-                  </div>
-                  <div>
-                    <p className="font-black text-slate-900">{tip.title}</p>
-                    <p className="mt-0.5 break-keep text-xs leading-5 text-slate-500">{tip.desc}</p>
-                  </div>
+              <p className="text-xs font-bold text-rose-400">오늘의 마무리 글귀</p>
+              <p className="mt-2 break-keep text-lg font-black leading-8 text-slate-800">
+                “오늘 해야 할 일을 해낸 것만으로도 충분히 멋져요. 이제 마음도 쉬어갈 시간이에요.”
+              </p>
+              <p className="mt-3 text-xs font-bold text-slate-400">{child.name}이는 오늘도 잘 해냈어요.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="rounded-[2rem] border border-orange-100 bg-white/90 shadow-md shadow-orange-100/60">
+            <CardContent className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-orange-400">오늘 스스로 해볼 일</p>
+                  <p className="text-lg font-black text-slate-900">작은 실천 3가지</p>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-500">혼자서도 OK</span>
+              </div>
+
+              <div className="space-y-2">
+                {activityTips.map((tip) => (
+                  <div key={tip.title} className="flex items-center gap-3 rounded-3xl bg-orange-50/70 p-3 text-left">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm">
+                      {tip.icon}
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-900">{tip.title}</p>
+                      <p className="mt-0.5 break-keep text-xs leading-5 text-slate-500">{tip.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <ChildHopeQuote child={child} selectedDay={selectedDay} />
       </motion.div>
@@ -1989,8 +2467,11 @@ function ChildView({
         <CardContent className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold text-slate-400">{child.name}이가 지금 할 일</p>
-              <h2 className="mt-1 text-3xl font-black text-rose-500">{current.title}</h2>
+              <p className="text-xs font-bold text-slate-400">지금 보고 있는 아이</p>
+              <div className="mt-1 inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-sm font-black text-rose-600">
+                {child.name} · {child.grade}
+              </div>
+              <h2 className="mt-2 text-3xl font-black text-rose-500">{current.title}</h2>
             </div>
             <button
               type="button"
@@ -2057,14 +2538,23 @@ function ChildView({
 
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
-          <Button className="h-12 rounded-3xl text-base font-black" onClick={() => updateStatus(current.id, "도착 완료")}>
+          <Button
+            className="h-12 rounded-3xl border-2 border-emerald-300 bg-emerald-100 text-base font-black text-emerald-900 shadow-sm hover:bg-emerald-200"
+            onClick={() => updateStatus(current.id, "도착 완료")}
+          >
             <CheckCircle2 className="mr-2" /> 도착했어요
           </Button>
-          <Button variant="secondary" className="h-12 rounded-3xl text-base font-black" onClick={() => updateStatus(current.id, "끝남")}>
+          <Button
+            className="h-12 rounded-3xl border-2 border-blue-500 bg-blue-500 text-base font-black text-white shadow-sm hover:bg-blue-600"
+            onClick={() => updateStatus(current.id, "끝남")}
+          >
             끝났어요
           </Button>
         </div>
-        <Button className="h-12 w-full rounded-3xl bg-rose-500 text-base font-black hover:bg-rose-600" onClick={() => updateStatus(current.id, "귀가 완료")}>
+        <Button
+          className="h-12 w-full rounded-3xl border-2 border-amber-300 bg-amber-100 text-base font-black text-amber-900 shadow-sm hover:bg-amber-200"
+          onClick={() => updateStatus(current.id, "귀가 완료")}
+        >
           <Home className="mr-2" size={22} /> 집에 왔어요
         </Button>
       </div>
@@ -2094,32 +2584,28 @@ function ChildView({
         {showContactOptions && (
           <div className="rounded-3xl border border-slate-100 bg-white p-3 shadow-sm">
             <p className="mb-2 text-sm font-black text-slate-700">연락할 사람을 선택하세요</p>
-            <div className="grid grid-cols-2 gap-2">
-              <a
-                href={`tel:${dadPhone}`}
-                className="flex h-12 items-center justify-center rounded-2xl bg-emerald-600 text-sm font-black text-white"
-              >
-                아빠에게 전화
-              </a>
-              <a
-                href={`tel:${momPhone}`}
-                className="flex h-12 items-center justify-center rounded-2xl bg-emerald-600 text-sm font-black text-white"
-              >
-                엄마에게 전화
-              </a>
-              <a
-                href={`sms:${dadPhone}?body=${smsText}`}
-                className="flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-700"
-              >
-                아빠에게 문자
-              </a>
-              <a
-                href={`sms:${momPhone}?body=${smsText}`}
-                className="flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-700"
-              >
-                엄마에게 문자
-              </a>
-            </div>
+            {contacts.length === 0 ? (
+              <p className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-500">설정에서 부모 연락처를 입력해주세요.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {contacts.map((parent) => (
+                  <React.Fragment key={parent.id || parent.label}>
+                    <a
+                      href={`tel:${parent.phone}`}
+                      className="flex h-12 items-center justify-center rounded-2xl bg-emerald-600 text-sm font-black text-white"
+                    >
+                      {parent.label || parent.name} 전화
+                    </a>
+                    <a
+                      href={`sms:${parent.phone}?body=${smsText}`}
+                      className="flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-700"
+                    >
+                      {parent.label || parent.name} 문자
+                    </a>
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2225,6 +2711,7 @@ function ParentView({
   child,
   selectedDay,
   schedules,
+  hadSchedulesToday,
   updateStatus,
   showAdd,
   setShowAdd,
@@ -2482,6 +2969,8 @@ function NotificationPanel({
   onTest,
   onClear,
   onReset,
+  notificationEnabled,
+  setNotificationEnabled,
   notices,
   newNotice,
   setNewNotice,
@@ -2490,14 +2979,57 @@ function NotificationPanel({
   role,
 }) {
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [selectedInfoGuide, setSelectedInfoGuide] = useState(null);
+  const [selectedNoticeId, setSelectedNoticeId] = useState(null);
+  const selectedNotice = notices.find((notice) => notice.id === selectedNoticeId) || null;
+
+  const appNotificationLabel = notificationEnabled ? "앱 알림 ON" : "앱 알림 OFF";
 
   const permissionLabel =
     {
-      granted: "알림 허용됨",
+      granted: "알림 허용 완료",
       denied: "알림 차단됨",
       default: "알림 허용 필요",
       unsupported: "브라우저 미지원",
     }[permission] || "알림 확인 필요";
+
+  const permissionStatusStyle =
+    {
+      granted: {
+        box: "border-emerald-200 bg-emerald-50 text-emerald-800",
+        badge: "bg-emerald-500 text-white",
+        dot: "bg-emerald-500",
+        message: "알림이 허용되어 있어요. 일정 시간이 되면 휴대폰 알림을 받을 수 있습니다.",
+        buttonText: "허용 완료",
+      },
+      denied: {
+        box: "border-red-200 bg-red-50 text-red-800",
+        badge: "bg-red-500 text-white",
+        dot: "bg-red-500",
+        message: "알림이 차단되어 있어요. 브라우저 또는 휴대폰 설정에서 알림을 다시 허용해야 합니다.",
+        buttonText: "차단됨",
+      },
+      unsupported: {
+        box: "border-slate-200 bg-slate-50 text-slate-700",
+        badge: "bg-slate-500 text-white",
+        dot: "bg-slate-400",
+        message: "현재 브라우저에서는 알림 기능을 지원하지 않습니다.",
+        buttonText: "미지원",
+      },
+      default: {
+        box: "border-amber-200 bg-amber-50 text-amber-800",
+        badge: "bg-amber-500 text-white",
+        dot: "bg-amber-500",
+        message: "아직 알림 권한을 허용하지 않았어요. 알림 허용 버튼을 누르면 일정 전 알림을 받을 수 있습니다.",
+        buttonText: "알림 허용",
+      },
+    }[permission] || {
+      box: "border-amber-200 bg-amber-50 text-amber-800",
+      badge: "bg-amber-500 text-white",
+      dot: "bg-amber-500",
+      message: "알림 상태를 확인해주세요.",
+      buttonText: "알림 허용",
+    };
 
   return (
     <Card className="rounded-3xl border-0 bg-white shadow-lg">
@@ -2514,16 +3046,7 @@ function NotificationPanel({
               </p>
             </div>
           </div>
-          <div className="flex gap-1">
-            {permission !== "granted" && permission !== "unsupported" && (
-              <Button size="sm" variant="outline" className="rounded-xl" onClick={onRequestPermission}>
-                허용
-              </Button>
-            )}
-            <Button size="sm" variant="outline" className="rounded-xl" onClick={onTest}>
-              테스트
-            </Button>
-          </div>
+
         </div>
 
         {role === "parent" && (
@@ -2552,74 +3075,289 @@ function NotificationPanel({
           </div>
         )}
 
-        <div className="mb-3 rounded-3xl border border-orange-100 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-black text-slate-900">가족 공지</p>
-            <span className="rounded-full bg-orange-50 px-2 py-1 text-[10px] font-black text-orange-500">{notices.length}개</span>
+        <section className="mb-3 rounded-3xl border-2 border-rose-100 bg-white p-3 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-black text-rose-600">공지</div>
+            <div>
+              <p className="text-sm font-black text-slate-900">가족 공지글</p>
+              
+            </div>
           </div>
-          {notices.length === 0 ? (
-            <p className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-500">
-              아직 작성된 가족 공지사항이 없습니다.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {notices.map((notice) => (
-                <div key={notice.id} className="rounded-2xl bg-orange-50/70 p-3">
-                  <div className="mb-1 flex items-start justify-between gap-2">
-                    <p className="break-keep text-sm font-black text-slate-900">{notice.title}</p>
-                    {role === "parent" && (
+          {!selectedNotice ? (
+            <>
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-black text-slate-900">가족 공지</p>
+                  
+                </div>
+                <span className="rounded-full bg-orange-50 px-2 py-1 text-[10px] font-black text-orange-500">{notices.length}개</span>
+              </div>
+
+              {notices.length === 0 ? (
+                <p className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-500">
+                  아직 작성된 가족 공지사항이 없습니다.
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                  {notices.map((notice, index) => (
+                    <div
+                      key={notice.id}
+                      className={`flex items-center gap-2 px-3 py-3 ${index !== notices.length - 1 ? "border-b border-slate-100" : ""}`}
+                    >
                       <button
                         type="button"
-                        onClick={() => deleteNotice(notice.id)}
-                        className="shrink-0 rounded-full bg-white p-1.5 text-slate-300 hover:text-red-400"
-                        title="공지 삭제"
+                        onClick={() => setSelectedNoticeId(notice.id)}
+                        className="min-w-0 flex-1 text-left"
                       >
-                        <Trash2 size={14} />
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="shrink-0 text-sm font-black text-rose-500">[공지]</span>
+                          <span className="truncate text-sm font-black text-slate-900">{notice.title}</span>
+                          <span className="shrink-0 text-[11px] font-bold text-slate-400">{notice.time}</span>
+                        </div>
                       </button>
-                    )}
-                  </div>
-                  {notice.body && <p className="break-keep text-xs leading-5 text-slate-600">{notice.body}</p>}
-                  <p className="mt-2 text-[10px] font-bold text-slate-400">{notice.author} · {notice.time}</p>
+                      {role === "parent" && (
+                        <button
+                          type="button"
+                          onClick={() => deleteNotice(notice.id)}
+                          className="shrink-0 rounded-full bg-slate-50 p-2 text-slate-300 hover:bg-red-50 hover:text-red-400"
+                          title="공지 삭제"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </>
+          ) : (
+            <div className="rounded-2xl bg-white p-1">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedNoticeId(null)}
+                  className="rounded-full bg-slate-100 px-3 py-2 text-xs font-black text-slate-600"
+                >
+                  ← 목록
+                </button>
+                {role === "parent" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteNotice(selectedNotice.id);
+                      setSelectedNoticeId(null);
+                    }}
+                    className="rounded-full bg-red-50 px-3 py-2 text-xs font-black text-red-500"
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+
+              <article className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                <div className="mb-3 border-b border-slate-200 pb-3">
+                  <span className="mb-2 inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-black text-rose-600">[공지]</span>
+                  <h2 className="break-keep text-xl font-black leading-7 text-slate-900">{selectedNotice.title}</h2>
+                  <p className="mt-2 text-xs font-bold text-slate-400">
+                    {selectedNotice.author} · {selectedNotice.time}
+                  </p>
+                </div>
+                <p className="whitespace-pre-line break-keep text-sm font-medium leading-7 text-slate-700">
+                  {selectedNotice.body || "공지 내용이 없습니다."}
+                </p>
+              </article>
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="mb-3 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
-          현재 상태: <span className="font-bold text-slate-900">{permissionLabel}</span>
-          <p className="mt-2 break-keep text-xs leading-5 text-slate-500">
-            앱을 켜둔 상태에서는 일정 알림창이 화면에 바로 뜹니다. 휴대폰 잠금화면 알림은 브라우저 알림 권한을 허용해야 표시됩니다.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowInstallGuide((prev) => !prev)}
-          className="mb-3 w-full rounded-2xl bg-blue-50 p-3 text-left text-sm text-blue-700 transition hover:bg-blue-100"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-bold">휴대폰 앱처럼 쓰기</span>
-            <span className="text-xs font-bold">{showInstallGuide ? "접기" : "방법 보기"}</span>
-          </div>
-          <p className="mt-1 text-xs text-blue-600">홈 화면에 추가하면 앱처럼 사용할 수 있습니다.</p>
-        </button>
-
-        {showInstallGuide && (
-          <div className="mb-3 rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-700">
-            <p className="mb-2 font-black text-slate-900">홈 화면에 추가하는 방법</p>
-            <div className="space-y-3">
-              <div className="rounded-2xl bg-slate-50 p-3">
-                <p className="font-bold text-slate-900">안드로이드 Chrome</p>
-                <p className="mt-1 text-xs leading-5 text-slate-600">오른쪽 위 점 3개 → 홈 화면에 추가 → 추가</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-3">
-                <p className="font-bold text-slate-900">아이폰 Safari</p>
-                <p className="mt-1 text-xs leading-5 text-slate-600">아래 공유 버튼 → 홈 화면에 추가 → 추가</p>
-              </div>
+        <section className="mb-3 rounded-3xl border-2 border-blue-100 bg-white p-3 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-600">안내</div>
+            <div>
+              <p className="text-sm font-black text-slate-900">앱 사용 안내</p>
+              <p className="text-xs text-slate-400">필요한 안내를 눌러 자세히 확인하세요.</p>
             </div>
           </div>
-        )}
+
+          <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+            <button
+              type="button"
+              onClick={() => setSelectedInfoGuide((prev) => (prev === "familyStart" ? null : "familyStart"))}
+              className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 text-left"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="rounded-full bg-rose-50 p-2 text-rose-600">
+                  <UserCog size={16} />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">처음 사용하는 가족 설정 안내</p>
+                  <p className="mt-0.5 text-xs font-bold text-slate-400">가족코드와 가족정보 입력 순서</p>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-600">
+                {selectedInfoGuide === "familyStart" ? "접기" : "보기"}
+              </span>
+            </button>
+
+            {selectedInfoGuide === "familyStart" && (
+              <div className="border-b border-slate-100 bg-rose-50/60 px-4 py-3 text-sm text-slate-700">
+                <p className="mb-2 font-black text-slate-900">처음 쓰는 가족은 이렇게 설정하세요</p>
+                <div className="space-y-2">
+                  <div className="rounded-2xl bg-white p-3">
+                    <p className="font-bold text-slate-900">1. 부모용 화면으로 들어가기</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">아이 정보와 가족코드는 부모용에서만 수정할 수 있습니다.</p>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <p className="font-bold text-slate-900">2. 설정 → 가족코드 설정</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">우리 가족만 쓸 코드를 입력하세요. 예: minjun-home-2026</p>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <p className="font-bold text-slate-900">3. 설정 → 내정보관리</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">부모 연락처, 아이 이름, 학년, 아이 핸드폰 번호를 입력하세요.</p>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <p className="font-bold text-slate-900">4. 같은 가족코드를 가족 휴대폰에도 입력</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">엄마, 아빠, 아이 휴대폰이 같은 가족코드를 쓰면 일정과 공지가 함께 보입니다.</p>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <p className="font-bold text-slate-900">5. 부모용 잠금 설정</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">아이들이 설정을 바꾸지 못하도록 부모용 비밀번호를 만들어주세요.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setSelectedInfoGuide((prev) => (prev === "alarm" ? null : "alarm"))}
+              className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 text-left"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="rounded-full bg-slate-100 p-2 text-slate-600">
+                  <Bell size={16} />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">알림 현재상태</p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <span className={`h-2 w-2 rounded-full ${notificationEnabled ? "bg-emerald-500" : "bg-slate-400"}`} />
+                    <p className="text-xs font-black text-slate-500">{appNotificationLabel} · {permissionLabel}</p>
+                  </div>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-600">
+                {selectedInfoGuide === "alarm" ? "접기" : "보기"}
+              </span>
+            </button>
+
+            {selectedInfoGuide === "alarm" && (
+              <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <div className={`rounded-2xl border-2 p-3 ${notificationEnabled ? permissionStatusStyle.box : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-3 w-3 rounded-full ${notificationEnabled ? permissionStatusStyle.dot : "bg-slate-400"}`} />
+                      <p className="font-black">앱 알림 상태: {appNotificationLabel}</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${notificationEnabled ? "bg-emerald-500 text-white" : "bg-slate-400 text-white"}`}>
+                      {notificationEnabled ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                  <p className="mt-2 break-keep text-xs font-bold leading-5">
+                    {notificationEnabled
+                      ? "앱 알림이 켜져 있어요. 아래 휴대폰 알림 권한까지 허용하면 일정 전 알림을 더 잘 받을 수 있습니다."
+                      : "앱 알림이 꺼져 있어요. 일정 전 화면 알림과 테스트 알림이 표시되지 않습니다."}
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      size="sm"
+                      className={`rounded-xl ${notificationEnabled ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-white text-slate-500"}`}
+                      onClick={() => setNotificationEnabled(true)}
+                      disabled={notificationEnabled}
+                    >
+                      알림 ON
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={`rounded-xl ${!notificationEnabled ? "bg-slate-200 text-slate-700" : "bg-white"}`}
+                      onClick={() => setNotificationEnabled(false)}
+                      disabled={!notificationEnabled}
+                    >
+                      알림 OFF
+                    </Button>
+                  </div>
+                </div>
+
+                <div className={`mt-3 rounded-2xl border-2 p-3 ${permissionStatusStyle.box}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-3 w-3 rounded-full ${permissionStatusStyle.dot}`} />
+                      <p className="font-black">휴대폰 권한: {permissionLabel}</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${permissionStatusStyle.badge}`}>
+                      {permission === "granted" ? "허용" : permission === "denied" ? "차단" : "확인 필요"}
+                    </span>
+                  </div>
+                  <p className="mt-2 break-keep text-xs font-bold leading-5">
+                    {permissionStatusStyle.message}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    size="sm"
+                    variant={permission === "default" ? "default" : "outline"}
+                    className={`rounded-xl ${permission === "default" ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-white"}`}
+                    onClick={onRequestPermission}
+                    disabled={permission === "granted" || permission === "unsupported"}
+                  >
+                    {permissionStatusStyle.buttonText}
+                  </Button>
+                  <Button size="sm" variant="outline" className="rounded-xl bg-white" onClick={onTest}>
+                    테스트 알림
+                  </Button>
+                </div>
+                <p className="mt-2 text-[11px] font-bold leading-5 text-slate-400">
+                  알림 허용 전에는 앱 안 알림만 보일 수 있고, 허용 후에는 휴대폰 알림도 받을 수 있습니다.
+                </p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setSelectedInfoGuide((prev) => (prev === "install" ? null : "install"))}
+              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="rounded-full bg-blue-50 p-2 text-blue-600">
+                  <Smartphone size={16} />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">휴대폰 앱처럼 쓰기 안내</p>
+                  <p className="mt-0.5 text-xs font-bold text-slate-400">홈 화면에 추가하는 방법</p>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-600">
+                {selectedInfoGuide === "install" ? "접기" : "보기"}
+              </span>
+            </button>
+
+            {selectedInfoGuide === "install" && (
+              <div className="bg-blue-50/60 px-4 py-3 text-sm text-slate-700">
+                <p className="mb-2 font-black text-slate-900">홈 화면에 추가하는 방법</p>
+                <div className="space-y-2">
+                  <div className="rounded-2xl bg-white p-3">
+                    <p className="font-bold text-slate-900">안드로이드 Chrome</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">오른쪽 위 점 3개 → 홈 화면에 추가 → 추가</p>
+                  </div>
+                  <div className="rounded-2xl bg-white p-3">
+                    <p className="font-bold text-slate-900">아이폰 Safari</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">아래 공유 버튼 → 홈 화면에 추가 → 추가</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
 
         {activeAlerts.length > 0 && (
           <div className="mb-3 space-y-2">
