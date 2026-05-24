@@ -1238,6 +1238,13 @@ export default function App() {
     const normalized = normalizeFamilyCode(familyCodeInput) || DEFAULT_FAMILY_SHARE_CODE;
     setFamilyCodeInput(normalized);
     setFamilyShareCode(normalized);
+
+    if (currentUser) {
+      const updatedUser = { ...currentUser, familyShareCode: normalized };
+      setCurrentUser(updatedUser);
+      setUsers((prev) => prev.map((user) => (user.id === currentUser.id ? updatedUser : user)));
+    }
+
     setCloudLoaded(false);
     setSyncStatus(isCloudSyncEnabled() ? "가족 공유방 이동 중" : "기기 저장 모드");
   };
