@@ -368,6 +368,51 @@ function saveFamilyShareCodeToStorage(code) {
   }
 }
 
+function loadSavedUsers() {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    const saved = localStorage.getItem("hakwonUsers");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveUsersToStorage(users) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonUsers", JSON.stringify(users));
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
+}
+
+function loadSavedCurrentUser() {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    const saved = localStorage.getItem("hakwonCurrentUser");
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCurrentUserToStorage(user) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (user) localStorage.setItem("hakwonCurrentUser", JSON.stringify(user));
+    else localStorage.removeItem("hakwonCurrentUser");
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
+}
+
+function makeUserFamilyCode(name) {
+  const base = normalizeFamilyCode(`${name || "family"}-family`) || "family";
+  return `${base}-${Date.now()}`.slice(0, 30);
+}
+
 function timeToMinutes(time) {
   if (!time || !time.includes(":")) return 0;
   const [h, m] = time.split(":").map(Number);
@@ -1003,6 +1048,9 @@ if (typeof window !== "undefined" && !window.__HAKWON_SELF_TESTED__) {
 }
 
 export default function App() {
+  const [users, setUsers] = useState(loadSavedUsers);
+  const [currentUser, setCurrentUser] = useState(loadSavedCurrentUser);
+
   useEffect(() => {
     if (typeof document === "undefined") return;
     if (document.getElementById("hakwon-jua-font")) return;
@@ -1057,6 +1105,7 @@ export default function App() {
   const [activeMenu, setActiveMenu] = useState("home");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
 
   useEffect(() => {
     const timer = setInterval(() => setNowTick(Date.now()), 30000);
@@ -1089,7 +1138,22 @@ export default function App() {
 
   useEffect(() => {
     saveFamilyShareCodeToStorage(familyShareCode);
-  }, [familyShareCode]);
+  }, [familyShareCode, currentUser]);
+
+  useEffect(() => {
+    saveUsersToStorage(users);
+  }, [users]);
+
+  useEffect(() => {
+    saveCurrentUserToStorage(currentUser);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser?.familyShareCode) return;
+    setFamilyShareCode(currentUser.familyShareCode);
+    setFamilyCodeInput(currentUser.familyShareCode);
+    setCloudLoaded(false);
+  }, [currentUser?.familyShareCode]);
 
   useEffect(() => {
     saveHomeworkToStorage(homework);
@@ -1119,6 +1183,7 @@ export default function App() {
   }, [notices]);
 
   useEffect(() => {
+    if (!currentUser) return;
     if (!isCloudSyncEnabled()) return;
     let cancelled = false;
 
@@ -1154,6 +1219,7 @@ export default function App() {
   }, [familyShareCode]);
 
   useEffect(() => {
+    if (!currentUser) return;
     if (!isCloudSyncEnabled() || !cloudLoaded) return;
 
     const timer = setTimeout(async () => {
@@ -1166,7 +1232,7 @@ export default function App() {
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, homeworkPoints, notices, familyShareCode, cloudLoaded]);
+  }, [schedules, locationChecks, defaultAlertTime, notificationEnabled, parentSecurity, familyInfo, homework, homeworkPoints, notices, familyShareCode, cloudLoaded, currentUser]);
 
   const applyFamilyShareCode = () => {
     const normalized = normalizeFamilyCode(familyCodeInput) || DEFAULT_FAMILY_SHARE_CODE;
@@ -1179,6 +1245,7 @@ export default function App() {
   const appChildren = familyInfo.children?.length ? familyInfo.children : defaultFamilyInfo.children;
   const parentContacts = familyInfo.parents?.length ? familyInfo.parents : defaultFamilyInfo.parents;
   const isParentLockActive = parentSecurity.lockEnabled && parentSecurity.password;
+  const parentAccessBlocked = role === "parent" && isParentLockActive && !parentAuthenticated;
 
   const saveParentPassword = (password) => {
     const trimmed = String(password || "").trim();
@@ -1306,9 +1373,12 @@ export default function App() {
     const nowMinutes = getNowMinutes(new Date(nowTick));
 
     return todaySchedules.filter((s) => {
-      if (["끝남", "귀가 완료"].includes(s.status)) return false;
       if (isFutureDate(selectedDate)) return true;
       if (!isTodayDate(selectedDate)) return false;
+
+      // 아이가 '끝났어요'를 눌러도 당일 화면에서 일정 카드가 사라지지 않도록 유지합니다.
+      if (["끝남", "도착 완료"].includes(s.status)) return true;
+
       return timeToMinutes(s.end || s.start) >= nowMinutes;
     });
   }, [todaySchedules, nowTick, selectedDate]);
@@ -1329,32 +1399,56 @@ export default function App() {
     () => getUpcomingSchedulesForChild(schedules, selectedChild, new Date(nowTick), 14),
     [schedules, selectedChild, nowTick]
   );
-  const todayHomework = useMemo(
+  const selectedDateHomework = useMemo(
     () => homework.filter((item) => item.childId === selectedChild && item.day === selectedDay && (!item.dateKey || item.dateKey === selectedDateKey)),
     [homework, selectedChild, selectedDay, selectedDateKey]
   );
+  const todayHomework = selectedDateHomework;
   const todayDateLabel = useMemo(() => getTodayDateLabel(selectedDate), [selectedDate]);
 
   const confirmHomeworkPoints = () => {
-    const awardKey = `${selectedChild}-${selectedDateKey}`;
-    const alreadyAwarded = homeworkPoints.awardedKeys?.includes(awardKey);
-    const canAward = todayHomework.length > 0 && todayHomework.every((item) => item.done) && !alreadyAwarded;
+    const canAward = selectedDateHomework.length > 0 && selectedDateHomework.every((item) => item.done);
 
     if (!canAward) return;
 
     setHomeworkPoints((prev) => ({
+      ...(prev || {}),
       points: {
-        ...(prev.points || {}),
-        [selectedChild]: (prev.points?.[selectedChild] || 0) + 500,
+        ...(prev?.points || {}),
+        [selectedChild]: (prev?.points?.[selectedChild] || 0) + 500,
       },
-      awardedKeys: [...(prev.awardedKeys || []), awardKey],
+      awardedKeys: [...(prev?.awardedKeys || [])],
     }));
 
     setAppAlerts((prev) => [
       {
         id: `homework-point-${Date.now()}`,
         title: "숙제 포인트 500점 지급 완료!",
-        body: `${child.name} 숙제를 부모님이 확인해서 500포인트가 지급됐어요.`,
+        body: `${child.name} ${todayDateLabel} 일일미션을 부모님이 확인해서 500포인트가 지급됐어요.`,
+        time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+      },
+      ...prev,
+    ].slice(0, 5));
+  };
+
+  const deductHomeworkPoints = (amount = 500) => {
+    setHomeworkPoints((prev) => {
+      const currentPoints = prev.points?.[selectedChild] || 0;
+      const nextPoints = Math.max(0, currentPoints - amount);
+      return {
+        ...(prev || {}),
+        points: {
+          ...(prev.points || {}),
+          [selectedChild]: nextPoints,
+        },
+      };
+    });
+
+    setAppAlerts((prev) => [
+      {
+        id: `homework-point-deduct-${Date.now()}`,
+        title: `포인트 ${amount}점 차감`,
+        body: `${child.name} 포인트가 ${amount}점 차감됐어요.`,
         time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
       },
       ...prev,
@@ -1661,6 +1755,72 @@ export default function App() {
     setTimeout(() => setCopyMessage(""), 2600);
   };
 
+  const handleSignup = ({ name, password, passwordConfirm }) => {
+    const cleanName = String(name || "").trim();
+    const cleanPassword = String(password || "").trim();
+    const cleanConfirm = String(passwordConfirm || "").trim();
+
+    if (!cleanName || !cleanPassword || !cleanConfirm) {
+      setAuthMessage("이름, 비밀번호, 비밀번호 확인을 모두 입력해주세요.");
+      return false;
+    }
+    if (cleanPassword.length < 4) {
+      setAuthMessage("비밀번호는 4자리 이상으로 만들어주세요.");
+      return false;
+    }
+    if (cleanPassword !== cleanConfirm) {
+      setAuthMessage("비밀번호 확인이 일치하지 않습니다.");
+      return false;
+    }
+    if (users.some((user) => user.name === cleanName)) {
+      setAuthMessage("이미 가입된 이름입니다. 로그인해주세요.");
+      return false;
+    }
+
+    const newUser = {
+      id: `user-${Date.now()}`,
+      name: cleanName,
+      password: cleanPassword,
+      familyShareCode: makeUserFamilyCode(cleanName),
+      createdAt: new Date().toISOString(),
+    };
+
+    setUsers((prev) => [...prev, newUser]);
+    setCurrentUser(newUser);
+    setFamilyShareCode(newUser.familyShareCode);
+    setFamilyCodeInput(newUser.familyShareCode);
+    setAuthMessage("");
+    return true;
+  };
+
+  const handleLogin = ({ name, password }) => {
+    const cleanName = String(name || "").trim();
+    const cleanPassword = String(password || "").trim();
+    const matched = users.find((user) => user.name === cleanName && user.password === cleanPassword);
+
+    if (!matched) {
+      setAuthMessage("이름 또는 비밀번호가 맞지 않습니다.");
+      return false;
+    }
+
+    setCurrentUser(matched);
+    setFamilyShareCode(matched.familyShareCode || DEFAULT_FAMILY_SHARE_CODE);
+    setFamilyCodeInput(matched.familyShareCode || DEFAULT_FAMILY_SHARE_CODE);
+    setAuthMessage("");
+    return true;
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setRole("child");
+    setParentAuthenticated(false);
+    setAuthMessage("");
+  };
+
+  if (!currentUser) {
+    return <AuthScreen onSignup={handleSignup} onLogin={handleLogin} message={authMessage} />;
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#fff7fb_0%,#fffaf2_46%,#f3fbff_100%)] text-slate-900">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -1694,7 +1854,7 @@ export default function App() {
                   className="relative text-[40px] font-black leading-none text-slate-950"
                   style={{
                     fontFamily: appFontFamily,
-                    letterSpacing: "0.20em",
+                    letterSpacing: "0.14em",
                     textShadow: "2px 3px 0 rgba(244, 114, 182, 0.20), 0 2px 12px rgba(15,23,42,0.08)",
                   }}
                 >
@@ -1705,6 +1865,18 @@ export default function App() {
             </div>
 
           <div className="mt-0 flex shrink-0 flex-col items-end gap-1.5">
+            <div className="flex items-center gap-1">
+              <p className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-400 shadow-sm">
+                {currentUser.name}님
+              </p>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500 shadow-sm"
+              >
+                로그아웃
+              </button>
+            </div>
             <p className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-400 shadow-sm">
               {syncStatus}
             </p>
@@ -1736,33 +1908,36 @@ export default function App() {
         </div>
         </header>
 
-        <div className="mb-1.5 grid grid-cols-2 gap-2">
+        <div className={`mb-1.5 grid ${appChildren.length === 1 ? "grid-cols-1 justify-items-center" : appChildren.length >= 3 ? "grid-cols-3 gap-1.5" : "grid-cols-2 gap-2"}`}>
           {appChildren.map((c) => {
             const isSelected = selectedChild === c.id;
+            const compactChildCard = appChildren.length >= 3;
 
             return (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => setSelectedChild(c.id)}
-                className={`relative overflow-hidden rounded-[22px] px-3 py-2.5 text-center transition-all duration-200 ${
+                className={`relative overflow-hidden text-center transition-all duration-200 ${appChildren.length === 1 ? "w-[58%] min-w-[170px] rounded-[22px] px-3 py-2.5" : compactChildCard ? "rounded-[18px] px-1.5 py-2" : "rounded-[22px] px-3 py-2.5"} ${
                   isSelected
                     ? "border-2 border-rose-400 bg-gradient-to-r from-rose-50 via-pink-50 to-white shadow-[0_8px_24px_rgba(244,114,182,0.20)]"
                     : "border border-rose-100 bg-white/90 shadow-sm hover:border-rose-200 hover:bg-rose-50/40"
-                }`}
+                }}`}
               >
                 {isSelected && (
                   <span className="absolute bottom-0 left-0 h-1.5 w-full bg-gradient-to-r from-rose-400 via-pink-300 to-orange-200" />
                 )}
 
-                <div className="flex items-center justify-center gap-3">
-                  <ChildAvatar child={c} />
-                  <div className="flex flex-col items-start justify-center" style={{ fontFamily: appFontFamily }}>
-                    <div className="flex items-baseline gap-2">
-                      <span className={`text-[18px] font-black leading-none ${isSelected ? "text-slate-950" : "text-slate-800"}`}>{c.name}</span>
-                      <span className={`text-[12px] font-bold ${isSelected ? "text-rose-500" : "text-slate-400"}`}>{c.grade}</span>
+                <div className={`flex items-center justify-center ${compactChildCard ? "gap-1.5" : "gap-3"}`}>
+                  <div className={compactChildCard ? "scale-[0.78]" : ""}>
+                    <ChildAvatar child={c} />
+                  </div>
+                  <div className="flex min-w-0 flex-col items-start justify-center" style={{ fontFamily: appFontFamily }}>
+                    <div className={`flex items-baseline ${compactChildCard ? "gap-1" : "gap-2"}`}>
+                      <span className={`${compactChildCard ? "text-[14px]" : "text-[18px]"} truncate font-black leading-none ${isSelected ? "text-slate-950" : "text-slate-800"}`}>{c.name}</span>
+                      <span className={`${compactChildCard ? "text-[10px]" : "text-[12px]"} shrink-0 font-bold ${isSelected ? "text-rose-500" : "text-slate-400"}`}>{c.grade}</span>
                     </div>
-                    <span className={`mt-1 text-[10px] font-bold ${isSelected ? "text-rose-500" : "text-slate-300"}`}>
+                    <span className={`${compactChildCard ? "mt-0.5 text-[9px]" : "mt-1 text-[10px]"} font-bold ${isSelected ? "text-rose-500" : "text-slate-300"}`}>
                       {isSelected ? "선택됨" : "일정 보기"}
                     </span>
                   </div>
@@ -1802,122 +1977,246 @@ export default function App() {
 
         <MainMenu activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
 
-        {activeMenu === "home" &&
-          (role === "child" ? (
-            <ChildView
-              child={child}
-              current={current}
-              selectedDay={selectedDay}
-              updateStatus={updateStatus}
-              schedules={visibleSchedules}
-              hadSchedulesToday={todaySchedules.length > 0}
-              locationChecks={locationChecks}
-              saveLocationCheck={saveLocationCheck}
-              parentContacts={parentContacts}
-              showAdd={showAdd}
-              setShowAdd={setShowAdd}
-              newSchedule={newSchedule}
-              updateNewSchedule={updateNewSchedule}
-              addSchedule={addSchedule}
-              cancelScheduleForm={cancelScheduleForm}
-              selectedDateLabel={todayDateLabel}
-              selectedDate={selectedDate}
-              selectedDay={selectedDay}
-              upcomingSchedules={upcomingSchedules}
-              onSelectUpcomingSchedule={(schedule) => {
-                const date = schedule.displayDateKey ? new Date(`${schedule.displayDateKey}T00:00:00`) : selectedDate;
-                setSelectedDate(date);
-                setSelectedDay(schedule.displayDay || getTodayKoreanDay(date));
-              }}
-            />
-          ) : isParentLockActive && !parentAuthenticated ? (
-            <ParentLockScreen onUnlock={unlockParentMode} onBackToChild={() => setRole("child")} />
-          ) : (
-            <ParentView
-              child={child}
-              selectedDay={selectedDay}
-              schedules={visibleSchedules}
-              hadSchedulesToday={todaySchedules.length > 0}
-              updateStatus={updateStatus}
-              showAdd={showAdd}
-              setShowAdd={setShowAdd}
-              newSchedule={newSchedule}
-              updateNewSchedule={updateNewSchedule}
-              addSchedule={addSchedule}
-              startEditSchedule={startEditSchedule}
-              editingScheduleId={editingScheduleId}
-              cancelScheduleForm={cancelScheduleForm}
-              requestDeleteSchedule={requestDeleteSchedule}
-              deleteTarget={deleteTarget}
-              cancelDeleteSchedule={cancelDeleteSchedule}
-              confirmDeleteSchedule={confirmDeleteSchedule}
-              locationChecks={locationChecks}
-              selectedDate={selectedDate}
-              upcomingSchedules={upcomingSchedules}
-              onSelectUpcomingSchedule={(schedule) => {
-                const date = schedule.displayDateKey ? new Date(`${schedule.displayDateKey}T00:00:00`) : selectedDate;
-                setSelectedDate(date);
-                setSelectedDay(schedule.displayDay || getTodayKoreanDay(date));
-              }}
-            />
-          ))}
+        {parentAccessBlocked ? (
+          <ParentLockScreen onUnlock={unlockParentMode} onBackToChild={() => setRole("child")} />
+        ) : (
+          <>
+            {activeMenu === "home" &&
+              (role === "child" ? (
+                <ChildView
+                  child={child}
+                  current={current}
+                  selectedDay={selectedDay}
+                  updateStatus={updateStatus}
+                  schedules={visibleSchedules}
+                  hadSchedulesToday={todaySchedules.length > 0}
+                  locationChecks={locationChecks}
+                  saveLocationCheck={saveLocationCheck}
+                  parentContacts={parentContacts}
+                  showAdd={showAdd}
+                  setShowAdd={setShowAdd}
+                  newSchedule={newSchedule}
+                  updateNewSchedule={updateNewSchedule}
+                  addSchedule={addSchedule}
+                  cancelScheduleForm={cancelScheduleForm}
+                  selectedDateLabel={todayDateLabel}
+                  selectedDate={selectedDate}
+                  selectedDay={selectedDay}
+                  upcomingSchedules={upcomingSchedules}
+                  onSelectUpcomingSchedule={(schedule) => {
+                    const date = schedule.displayDateKey ? new Date(`${schedule.displayDateKey}T00:00:00`) : selectedDate;
+                    setSelectedDate(date);
+                    setSelectedDay(schedule.displayDay || getTodayKoreanDay(date));
+                  }}
+                />
+              ) : (
+                <ParentView
+                  child={child}
+                  selectedDay={selectedDay}
+                  schedules={visibleSchedules}
+                  hadSchedulesToday={todaySchedules.length > 0}
+                  updateStatus={updateStatus}
+                  showAdd={showAdd}
+                  setShowAdd={setShowAdd}
+                  newSchedule={newSchedule}
+                  updateNewSchedule={updateNewSchedule}
+                  addSchedule={addSchedule}
+                  startEditSchedule={startEditSchedule}
+                  editingScheduleId={editingScheduleId}
+                  cancelScheduleForm={cancelScheduleForm}
+                  requestDeleteSchedule={requestDeleteSchedule}
+                  deleteTarget={deleteTarget}
+                  cancelDeleteSchedule={cancelDeleteSchedule}
+                  confirmDeleteSchedule={confirmDeleteSchedule}
+                  locationChecks={locationChecks}
+                  selectedDate={selectedDate}
+                  upcomingSchedules={upcomingSchedules}
+                  onSelectUpcomingSchedule={(schedule) => {
+                    const date = schedule.displayDateKey ? new Date(`${schedule.displayDateKey}T00:00:00`) : selectedDate;
+                    setSelectedDate(date);
+                    setSelectedDay(schedule.displayDay || getTodayKoreanDay(date));
+                  }}
+                />
+              ))}
 
-        {activeMenu === "homework" && (
-          <HomeworkPanel
-            child={child}
-            selectedDay={selectedDay}
-            homework={todayHomework}
-            newHomeworkText={newHomeworkText}
-            setNewHomeworkText={setNewHomeworkText}
-            addHomework={addHomework}
-            toggleHomework={toggleHomework}
-            deleteHomework={deleteHomework}
-            role={role}
-            homeworkPoints={homeworkPoints.points?.[selectedChild] || 0}
-            pointAwardedToday={homeworkPoints.awardedKeys?.includes(`${selectedChild}-${selectedDateKey}`)}
-            onConfirmHomeworkPoints={confirmHomeworkPoints}
-          />
-        )}
+            {activeMenu === "homework" && (
+              <HomeworkPanel
+                child={child}
+                selectedDay={selectedDay}
+                homework={selectedDateHomework}
+                newHomeworkText={newHomeworkText}
+                setNewHomeworkText={setNewHomeworkText}
+                addHomework={addHomework}
+                toggleHomework={toggleHomework}
+                deleteHomework={deleteHomework}
+                role={role}
+                homeworkPoints={homeworkPoints.points?.[selectedChild] || 0}
+                pointAwardedToday={false}
+                selectedDateLabel={todayDateLabel}
+                onConfirmHomeworkPoints={confirmHomeworkPoints}
+                onDeductHomeworkPoints={deductHomeworkPoints}
+              />
+            )}
 
-        {activeMenu === "notice" && (
-          <NotificationPanel
-            activeAlerts={activeAlerts}
-            appAlerts={appAlerts}
-            permission={notificationPermission}
-            onRequestPermission={requestNotificationPermission}
-            onTest={testNotification}
-            onClear={clearAppAlerts}
-            onReset={resetSchedules}
-            notificationEnabled={notificationEnabled}
-            setNotificationEnabled={setNotificationEnabled}
-            notices={notices}
-            newNotice={newNotice}
-            setNewNotice={setNewNotice}
-            addNotice={addNotice}
-            deleteNotice={deleteNotice}
-            role={role}
-          />
-        )}
+            {activeMenu === "notice" && (
+              <NotificationPanel
+                activeAlerts={activeAlerts}
+                appAlerts={appAlerts}
+                permission={notificationPermission}
+                onRequestPermission={requestNotificationPermission}
+                onTest={testNotification}
+                onClear={clearAppAlerts}
+                onReset={resetSchedules}
+                notificationEnabled={notificationEnabled}
+                setNotificationEnabled={setNotificationEnabled}
+                notices={notices}
+                newNotice={newNotice}
+                setNewNotice={setNewNotice}
+                addNotice={addNotice}
+                deleteNotice={deleteNotice}
+                role={role}
+              />
+            )}
 
-        {activeMenu === "settings" && (
-          <WebAppGuidePanel
-            onCopy={copyAppLink}
-            onShare={shareApp}
-            copyMessage={copyMessage}
-            defaultAlertTime={defaultAlertTime}
-            onDefaultAlertTimeChange={changeDefaultAlertTime}
-            parentSecurity={parentSecurity}
-            onSaveParentPassword={saveParentPassword}
-            onToggleParentLock={toggleParentLock}
-            familyInfo={familyInfo}
-            setFamilyInfo={setFamilyInfo}
-            familyShareCode={familyShareCode}
-            familyCodeInput={familyCodeInput}
-            setFamilyCodeInput={setFamilyCodeInput}
-            onApplyFamilyShareCode={applyFamilyShareCode}
-            role={role}
-          />
+            {activeMenu === "settings" && (
+              <WebAppGuidePanel
+                onCopy={copyAppLink}
+                onShare={shareApp}
+                copyMessage={copyMessage}
+                defaultAlertTime={defaultAlertTime}
+                onDefaultAlertTimeChange={changeDefaultAlertTime}
+                parentSecurity={parentSecurity}
+                onSaveParentPassword={saveParentPassword}
+                onToggleParentLock={toggleParentLock}
+                familyInfo={familyInfo}
+                setFamilyInfo={setFamilyInfo}
+                familyShareCode={familyShareCode}
+                familyCodeInput={familyCodeInput}
+                setFamilyCodeInput={setFamilyCodeInput}
+                onApplyFamilyShareCode={applyFamilyShareCode}
+                role={role}
+              />
+            )}
+          </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function AuthScreen({ onSignup, onLogin, message }) {
+  const [mode, setMode] = useState("login");
+  const [form, setForm] = useState({ name: "", password: "", passwordConfirm: "" });
+
+  const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  const submit = () => {
+    const ok = mode === "signup" ? onSignup(form) : onLogin(form);
+    if (ok) setForm({ name: "", password: "", passwordConfirm: "" });
+  };
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#fff7fb_0%,#fffaf2_46%,#f3fbff_100%)] px-4 py-8 text-slate-900">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-10 -top-12 h-44 w-44 rounded-full bg-pink-200/40 blur-3xl" />
+        <div className="absolute -right-12 top-20 h-52 w-52 rounded-full bg-sky-200/35 blur-3xl" />
+        <div className="absolute left-8 bottom-24 h-40 w-40 rounded-full bg-yellow-200/30 blur-3xl" />
+        <div className="absolute left-8 top-24 text-2xl opacity-25">⭐</div>
+        <div className="absolute right-10 top-32 text-2xl opacity-25">☁️</div>
+        <div className="absolute left-8 bottom-44 text-2xl opacity-25">🌈</div>
+      </div>
+
+      <div className="relative z-10 mx-auto max-w-md">
+        <div className="mb-5 text-center">
+          <div className="mb-2 inline-flex rounded-full border border-rose-100 bg-white/85 px-3 py-1 text-xs font-black text-rose-500 shadow-sm">
+            초등학생 동선 알림앱 ♥
+          </div>
+          <h1
+            className="text-[42px] font-black leading-none text-slate-950"
+            style={{
+              fontFamily: appFontFamily,
+              letterSpacing: "0.14em",
+              textShadow: "2px 3px 0 rgba(244, 114, 182, 0.20), 0 2px 12px rgba(15,23,42,0.08)",
+            }}
+          >
+            학원안가니?
+          </h1>
+          <p className="mt-3 break-keep text-sm font-bold leading-6 text-slate-500">
+            가족별 계정으로 로그인해서 우리 가족 일정만 안전하게 관리하세요.
+          </p>
+        </div>
+
+        <Card className="rounded-[2rem] border border-rose-100 bg-white/90 shadow-[0_16px_36px_rgba(244,114,182,0.14)] backdrop-blur">
+          <CardContent className="p-5">
+            <div className="mb-4 grid grid-cols-2 rounded-2xl border border-rose-100 bg-rose-50/60 p-1">
+              <button
+                type="button"
+                onClick={() => setMode("login")}
+                className={`rounded-xl py-2 text-sm font-black transition ${mode === "login" ? "bg-rose-400 text-white shadow" : "text-rose-500"}`}
+              >
+                로그인
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("signup")}
+                className={`rounded-xl py-2 text-sm font-black transition ${mode === "signup" ? "bg-rose-400 text-white shadow" : "text-rose-500"}`}
+              >
+                회원가입
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-black text-slate-500">이름</label>
+                <input
+                  value={form.name}
+                  onChange={(e) => updateForm("name", e.target.value)}
+                  placeholder="예: 홍길동"
+                  className="w-full rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-black text-slate-500">비밀번호</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => updateForm("password", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && mode === "login") submit();
+                  }}
+                  placeholder="4자리 이상"
+                  className="w-full rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
+                />
+              </div>
+
+              {mode === "signup" && (
+                <div>
+                  <label className="mb-1 block text-xs font-black text-slate-500">비밀번호 확인</label>
+                  <input
+                    type="password"
+                    value={form.passwordConfirm}
+                    onChange={(e) => updateForm("passwordConfirm", e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submit();
+                    }}
+                    placeholder="비밀번호를 한 번 더 입력"
+                    className="w-full rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold outline-none focus:border-rose-300"
+                  />
+                </div>
+              )}
+            </div>
+
+            {message && <p className="mt-3 rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-500">{message}</p>}
+
+            <Button className="mt-4 h-12 w-full rounded-3xl text-base font-black" onClick={submit}>
+              {mode === "signup" ? "회원가입하고 시작하기" : "로그인"}
+            </Button>
+
+            <p className="mt-3 break-keep rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">
+              테스트용 간편 로그인입니다. 이름과 비밀번호만 저장하며, 가입한 사용자마다 가족 공유 공간이 따로 만들어집니다.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -2207,7 +2506,7 @@ function ParentLockScreen({ onUnlock, onBackToChild }) {
 function MainMenu({ activeMenu, setActiveMenu }) {
   const menus = [
     { id: "home", label: "홈", icon: <Home size={16} /> },
-    { id: "homework", label: "숙제하기", icon: <ListChecks size={16} /> },
+    { id: "homework", label: "일일미션", icon: <ListChecks size={16} /> },
     { id: "notice", label: "공지사항", icon: <Bell size={16} /> },
     { id: "settings", label: "설정", icon: <Smartphone size={16} /> },
   ];
@@ -2238,6 +2537,13 @@ function ChildView({
   schedules,
   selectedDate,
   parentContacts,
+  showAdd,
+  setShowAdd,
+  newSchedule,
+  updateNewSchedule,
+  addSchedule,
+  cancelScheduleForm,
+  selectedDateLabel,
 }) {
   if (!current) {
     const selfTasks = [
@@ -2285,7 +2591,7 @@ function ChildView({
 
       <Card className="overflow-hidden rounded-[1.7rem] border border-rose-100 bg-white/95 shadow-[0_10px_24px_rgba(244,114,182,0.12)]">
         <CardContent className="p-3">
-          <div className="mb-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="mb-2 grid grid-cols-[1fr_auto_1fr] items-start gap-2">
             <div className="justify-self-start truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
               {child.name} · {child.grade}
             </div>
@@ -2293,28 +2599,42 @@ function ChildView({
               <span className="text-base">⭐</span>
               <span className="text-[16px] font-black tracking-[0.08em] text-rose-500">오늘의 일정</span>
             </div>
-            <div />
+            <button
+              type="button"
+              onClick={() => setShowAdd((prev) => !prev)}
+              className="justify-self-end truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm transition hover:bg-rose-50"
+            >
+              일정 직접 입력
+            </button>
           </div>
 
           <div className="mb-2 rounded-[1.4rem] bg-gradient-to-br from-white via-rose-50/80 to-white p-2.5 shadow-sm">
-            <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-              <div className="min-w-0">
-                <h2 className="truncate text-[32px] font-black leading-none tracking-tight text-rose-500">
-                  {current.title}
-                </h2>
-                <div className="mt-1 h-1 w-20 rounded-full bg-yellow-300/80" />
+            <div className="relative mb-2 text-center">
+              <div className="absolute left-0 top-1 flex items-center gap-1.5">
+                <span className="text-base">🗓️</span>
+                <p className="text-sm font-black text-rose-500">지금 할 일</p>
               </div>
-              <div className="shrink-0 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-center shadow-sm">
-                <p className="text-[10px] font-black text-rose-400">시간</p>
-                <p className="text-[15px] font-black leading-tight text-rose-700">{formatKoreanTimeRange(current.start, current.end)}</p>
-              </div>
+              <h2 className="truncate text-[38px] font-black leading-none tracking-tight text-rose-500">
+                {current.title}
+              </h2>
+              <div className="mx-auto mt-1 h-1 w-24 rounded-full bg-yellow-300/80" />
             </div>
 
-            <div className="mt-2 flex items-center gap-2 rounded-[1.2rem] border border-slate-100 bg-white px-2.5 py-2 shadow-sm">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-50 text-lg">📍</div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-black text-slate-900">{current.place}</p>
-                <p className="truncate text-[10px] font-bold text-slate-400">장소 확인 후 이동</p>
+            <div className="grid grid-cols-2 items-stretch gap-2">
+              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-2.5 py-2.5 text-center shadow-[0_6px_16px_rgba(14,165,233,0.16)]">
+                <div className="mb-0.5 flex items-center justify-center gap-1">
+                  <span className="text-base leading-none">📍</span>
+                  <span className="text-[12px] font-black text-sky-500">장소</span>
+                </div>
+                <p className="truncate text-[17px] font-black text-slate-950">{current.place}</p>
+              </div>
+
+              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 px-2.5 py-2.5 text-center shadow-[0_6px_16px_rgba(244,114,182,0.16)]">
+                <div className="mb-0.5 flex items-center justify-center gap-1">
+                  <span className="text-base leading-none">🕒</span>
+                  <span className="text-[12px] font-black text-rose-500">시간</span>
+                </div>
+                <p className="truncate text-[17px] font-black leading-tight text-rose-700">{formatKoreanTimeRange(current.start, current.end)}</p>
               </div>
             </div>
           </div>
@@ -2371,20 +2691,51 @@ function ChildView({
         </CardContent>
       </Card>
 
-      <div className="space-y-1.5">
-        <div className="grid grid-cols-2 gap-1.5">
-          <Button className="h-10 rounded-3xl border-2 border-emerald-300 bg-emerald-100 text-sm font-black text-emerald-900 shadow-sm hover:bg-emerald-200" onClick={() => updateStatus(current.id, "도착 완료")}>도착했어요</Button>
-          <Button className="h-10 rounded-3xl border-2 border-blue-500 bg-blue-500 text-sm font-black text-white shadow-sm hover:bg-blue-600" onClick={() => updateStatus(current.id, "끝남")}>끝났어요</Button>
-        </div>
-        <Button className="h-10 w-full rounded-3xl border-2 border-amber-300 bg-amber-100 text-sm font-black text-amber-900 shadow-sm hover:bg-amber-200" onClick={() => updateStatus(current.id, "귀가 완료")}>집에 왔어요</Button>
+      {showAdd && (
+        <ChildScheduleAddBox
+          showAdd={showAdd}
+          setShowAdd={setShowAdd}
+          newSchedule={newSchedule}
+          updateNewSchedule={updateNewSchedule}
+          addSchedule={addSchedule}
+          cancelScheduleForm={cancelScheduleForm}
+          selectedDateLabel={selectedDateLabel}
+          child={child}
+          selectedDay={selectedDay}
+        />
+      )}
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => updateStatus(current.id, current.status === "도착 완료" ? "대기" : "도착 완료")}
+          className={`h-11 rounded-[1.2rem] border-2 text-sm font-black shadow-[0_6px_16px_rgba(16,185,129,0.14)] transition hover:scale-[1.01] ${
+            current.status === "도착 완료"
+              ? "border-emerald-500 bg-emerald-500 text-white"
+              : "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50 text-emerald-700 hover:border-emerald-300"
+          }`}
+        >
+          {current.status === "도착 완료" ? "✅ 도착 확인됨" : "✅ 도착했어요"}
+        </button>
+        <button
+          type="button"
+          onClick={() => updateStatus(current.id, current.status === "끝남" ? "대기" : "끝남")}
+          className={`h-11 rounded-[1.2rem] border-2 text-sm font-black shadow-[0_6px_16px_rgba(59,130,246,0.14)] transition hover:scale-[1.01] ${
+            current.status === "끝남"
+              ? "border-blue-500 bg-blue-500 text-white"
+              : "border-blue-200 bg-gradient-to-br from-blue-50 via-white to-sky-50 text-blue-700 hover:border-blue-300"
+          }`}
+        >
+          {current.status === "끝남" ? "💙 끝남 확인됨" : "💙 끝났어요"}
+        </button>
       </div>
 
       {contacts.length > 0 && (
-        <div className="rounded-[1.5rem] border border-emerald-100 bg-white/90 p-2 shadow-sm">
+        <div className="rounded-[1.5rem] border border-rose-100 bg-white/90 p-2 shadow-sm">
           <button
             type="button"
             onClick={() => setShowParentContact((prev) => !prev)}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-black text-white shadow-sm"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-[1.2rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 text-sm font-black text-rose-600 shadow-[0_6px_16px_rgba(244,114,182,0.14)] transition hover:scale-[1.01] hover:border-rose-300"
           >
             <Phone size={16} /> 부모님께 연락하기
           </button>
@@ -2392,8 +2743,8 @@ function ChildView({
           {showParentContact && (
             <div className="mt-2 space-y-2">
               {contacts.slice(0, 2).map((parent) => (
-                <div key={parent.id || parent.label} className="grid grid-cols-2 gap-2 rounded-2xl bg-emerald-50/70 p-2">
-                  <a href={`tel:${parent.phone}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-700 shadow-sm">
+                <div key={parent.id || parent.label} className="grid grid-cols-2 gap-2 rounded-2xl bg-rose-50/70 p-2">
+                  <a href={`tel:${parent.phone}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-rose-600 shadow-sm">
                     {parent.label || parent.name} 전화
                   </a>
                   <a href={`sms:${parent.phone}?body=${smsText}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-slate-700 shadow-sm">
@@ -2510,11 +2861,9 @@ function ParentView({
                   <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => startEditSchedule(s)}><Pencil size={14} className="mr-1" /> 수정</Button>
                   <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "대기")}>대기 상태로</Button>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "이동 중")}>이동</Button>
+                <div className="grid grid-cols-2 gap-2">
                   <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "도착 완료")}>도착</Button>
                   <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "끝남")}>끝남</Button>
-                  <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => updateStatus(s.id, "귀가 완료")}>귀가</Button>
                 </div>
               </div>
               ))}
@@ -2623,11 +2972,14 @@ function HomeworkPanel({
   homeworkPoints,
   pointAwardedToday,
   onConfirmHomeworkPoints,
+  onDeductHomeworkPoints,
+  selectedDateLabel,
 }) {
+  const [pointActionStatus, setPointActionStatus] = useState("idle");
   const doneCount = homework.filter((item) => item.done).length;
   const totalCount = homework.length;
   const allHomeworkDone = totalCount > 0 && doneCount === totalCount;
-  const waitingParentConfirm = allHomeworkDone && !pointAwardedToday;
+  const waitingParentConfirm = allHomeworkDone;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
@@ -2636,9 +2988,9 @@ function HomeworkPanel({
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold text-rose-400">
-                {child.name} · {selectedDay}요일
+                {child.name} · {selectedDateLabel || `${selectedDay}요일`}
               </p>
-              <h2 className="mt-1 text-2xl font-black text-slate-900">숙제하기</h2>
+              <h2 className="mt-1 text-2xl font-black text-slate-900">일일미션</h2>
               <p className="mt-1 break-keep text-xs leading-5 text-slate-500">
                 생각난 숙제를 바로 적고, 끝나면 체크해요.
               </p>
@@ -2719,22 +3071,48 @@ function HomeworkPanel({
             </div>
           )}
 
-          {role === "parent" && waitingParentConfirm && (
-            <Button className="mt-3 h-11 w-full rounded-3xl bg-amber-500 text-white hover:bg-amber-600" onClick={onConfirmHomeworkPoints}>
-              숙제 확인하고 500포인트 지급
-            </Button>
+          {role === "parent" && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className={`h-11 rounded-3xl border-2 text-sm font-black shadow-sm transition disabled:opacity-40 ${
+                  pointActionStatus === "paid"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-teal-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-50"
+                }`}
+                onClick={() => {
+                  if (pointActionStatus === "paid") return;
+                  onConfirmHomeworkPoints?.();
+                  setPointActionStatus("paid");
+                }}
+                disabled={!allHomeworkDone || pointActionStatus === "paid"}
+              >
+                {pointActionStatus === "paid" ? "지급됨" : "500포인트 지급"}
+              </button>
+              <button
+                type="button"
+                className="h-11 rounded-3xl border-2 border-red-300 bg-gradient-to-br from-red-50 via-white to-rose-50 text-sm font-black text-red-600 shadow-sm transition hover:border-red-500 hover:bg-red-50 disabled:opacity-40"
+                onClick={() => {
+                  onDeductHomeworkPoints?.(500);
+                  setPointActionStatus("idle");
+                }}
+                disabled={false}
+              >
+                500포인트 차감
+              </button>
+            </div>
           )}
 
           <div className="mt-3 rounded-3xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-500">
-            {pointAwardedToday
-              ? "부모님 확인이 완료되어 오늘 포인트 500점이 지급됐어요!"
-              : waitingParentConfirm
-                ? role === "parent"
-                  ? "아이가 숙제를 모두 완료했어요. 확인 버튼을 누르면 포인트가 지급됩니다."
-                  : "숙제를 모두 완료했어요. 부모님 확인을 기다리는 중이에요."
-                : role === "child"
-                  ? "숙제를 모두 체크한 뒤 부모님이 확인하면 포인트 500점을 받을 수 있어요."
-                  : "아이가 숙제를 모두 완료하면 부모님 확인 후 포인트 500점이 지급됩니다."}
+            {waitingParentConfirm
+              ? role === "parent"
+                ? pointActionStatus === "paid"
+                  ? "500포인트가 지급됐어요. 차감하면 다시 지급할 수 있습니다."
+                  : "일일미션 완료를 확인한 뒤 500포인트를 지급할 수 있습니다."
+                : "일일미션을 모두 완료했어요. 부모님 확인을 기다리는 중이에요."
+              : role === "child"
+                ? "일일미션을 모두 체크하면 부모님 확인 후 500포인트를 받을 수 있어요."
+                : "일일미션을 모두 완료하면 포인트 지급 버튼이 활성화됩니다."}
           </div>
         </CardContent>
       </Card>
@@ -2763,6 +3141,7 @@ function WebAppGuidePanel({
   const [selectedSetting, setSelectedSetting] = useState(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
+  const [deleteChildConfirmIndex, setDeleteChildConfirmIndex] = useState(null);
 
   const updateParentInfo = (index, field, value) => {
     if (!canEditSettings) return;
@@ -2803,6 +3182,7 @@ function WebAppGuidePanel({
       if ((prev.children || []).length <= 1) return prev;
       return { ...prev, children: prev.children.filter((_, i) => i !== index) };
     });
+    setDeleteChildConfirmIndex(null);
   };
 
   const handleSavePassword = () => {
@@ -2815,8 +3195,25 @@ function WebAppGuidePanel({
 
   const handleToggleLock = (enabled) => {
     if (!canEditSettings) return;
-    const ok = onToggleParentLock(enabled);
-    setPasswordMessage(ok ? (enabled ? "부모용 잠금이 켜졌어요." : "부모용 잠금이 해제됐어요.") : "비밀번호를 먼저 만들어주세요.");
+
+    if (enabled) {
+      if (passwordInput.trim()) {
+        const ok = onSaveParentPassword(passwordInput);
+        setPasswordMessage(ok ? "비밀번호가 저장되고 부모용 잠금이 켜졌어요." : "비밀번호는 4자리 이상으로 만들어주세요.");
+        if (ok) setPasswordInput("");
+        setTimeout(() => setPasswordMessage(""), 2500);
+        return;
+      }
+
+      const ok = onToggleParentLock(true);
+      setPasswordMessage(ok ? "부모용 잠금이 켜졌어요." : "비밀번호를 입력한 뒤 잠금 버튼을 눌러주세요.");
+      setTimeout(() => setPasswordMessage(""), 2500);
+      return;
+    }
+
+    const ok = onToggleParentLock(false);
+    setPasswordMessage(ok ? "부모용 잠금이 해제됐어요." : "잠금 해제에 실패했어요.");
+    setPasswordInput("");
     setTimeout(() => setPasswordMessage(""), 2500);
   };
 
@@ -2891,8 +3288,39 @@ function WebAppGuidePanel({
                               <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
                                 <input value={child.name || ""} onChange={(e) => updateChildInfo(index, "name", e.target.value)} disabled={!canEditSettings} placeholder="아이 이름" className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-orange-300" />
                                 <input value={child.grade || ""} onChange={(e) => updateChildInfo(index, "grade", e.target.value)} disabled={!canEditSettings} placeholder="학년 예: 초3" className="min-w-0 rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300" />
-                                <button type="button" onClick={() => deleteChildInfo(index)} disabled={!canEditSettings || (familyInfo?.children || []).length <= 1} className="rounded-2xl border border-red-100 bg-white px-3 py-2 text-xs font-black text-red-400 transition hover:bg-red-50 disabled:opacity-30">삭제</button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteChildConfirmIndex(index)}
+                                  disabled={!canEditSettings || (familyInfo?.children || []).length <= 1}
+                                  className="rounded-2xl border border-red-100 bg-white px-3 py-2 text-xs font-black text-red-400 transition hover:bg-red-50 disabled:opacity-30"
+                                >
+                                  삭제
+                                </button>
                               </div>
+                              {deleteChildConfirmIndex === index && (
+                                <div className="mt-2 rounded-2xl border border-red-100 bg-red-50 p-3">
+                                  <p className="text-sm font-black text-red-700">삭제하겠습니까?</p>
+                                  <p className="mt-1 text-xs font-bold text-red-500">
+                                    {child.name || "아이"} 정보를 삭제하면 해당 아이 선택 카드에서 사라집니다.
+                                  </p>
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteChildConfirmIndex(null)}
+                                      className="h-10 rounded-2xl border border-slate-200 bg-white text-xs font-black text-slate-500"
+                                    >
+                                      취소
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteChildInfo(index)}
+                                      className="h-10 rounded-2xl bg-red-500 text-xs font-black text-white shadow-sm"
+                                    >
+                                      삭제하기
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                               <input value={child.phone || ""} onChange={(e) => updateChildInfo(index, "phone", e.target.value)} disabled={!canEditSettings} placeholder="아이 핸드폰 번호 예: 01012345678" className="mt-2 w-full rounded-2xl border border-orange-100 bg-white px-3 py-2 text-sm outline-none focus:border-orange-300" />
                             </div>
                           ))}
@@ -2917,11 +3345,53 @@ function WebAppGuidePanel({
                     </div>
                   ) : item.id === "parentLock" ? (
                     <div className="space-y-3">
+                      <div className={`rounded-2xl border-2 p-3 ${parentSecurity?.lockEnabled ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-slate-50"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`rounded-full p-2 ${parentSecurity?.lockEnabled ? "bg-rose-500 text-white" : "bg-slate-200 text-slate-500"}`}>
+                              {parentSecurity?.lockEnabled ? <Lock size={16} /> : <Unlock size={16} />}
+                            </div>
+                            <div>
+                              <p className={`text-sm font-black ${parentSecurity?.lockEnabled ? "text-rose-700" : "text-slate-600"}`}>
+                                현재 상태: {parentSecurity?.lockEnabled ? "잠금중" : "해제중"}
+                              </p>
+                              <p className="mt-0.5 text-xs font-bold text-slate-400">
+                                {parentSecurity?.lockEnabled ? "부모용 화면에 들어갈 때 비밀번호가 필요합니다." : "부모용 화면을 비밀번호 없이 열 수 있습니다."}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${parentSecurity?.lockEnabled ? "bg-rose-500 text-white" : "bg-slate-300 text-white"}`}>
+                            {parentSecurity?.lockEnabled ? "LOCK" : "OPEN"}
+                          </span>
+                        </div>
+                      </div>
+
                       <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} disabled={!canEditSettings} placeholder="부모용 비밀번호 4자리 이상" className="w-full rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm outline-none focus:border-rose-300" />
-                      <div className="grid grid-cols-3 gap-2">
-                        <Button className="rounded-2xl" onClick={handleSavePassword} disabled={!canEditSettings}>저장</Button>
-                        <Button variant="outline" className="rounded-2xl" onClick={() => handleToggleLock(true)} disabled={!canEditSettings}>잠금</Button>
-                        <Button variant="outline" className="rounded-2xl" onClick={() => handleToggleLock(false)} disabled={!canEditSettings}>해제</Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLock(true)}
+                          disabled={!canEditSettings}
+                          className={`h-11 rounded-2xl text-sm font-black shadow-sm transition disabled:opacity-40 ${
+                            parentSecurity?.lockEnabled
+                              ? "border-2 border-rose-500 bg-rose-500 text-white"
+                              : "border-2 border-rose-100 bg-white text-rose-500 hover:bg-rose-50"
+                          }`}
+                        >
+                          잠금
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLock(false)}
+                          disabled={!canEditSettings}
+                          className={`h-11 rounded-2xl text-sm font-black shadow-sm transition disabled:opacity-40 ${
+                            !parentSecurity?.lockEnabled
+                              ? "border-2 border-slate-400 bg-slate-400 text-white"
+                              : "border-2 border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                          }`}
+                        >
+                          해제
+                        </button>
                       </div>
                       {passwordMessage && <p className="rounded-2xl bg-rose-50 p-3 text-xs font-bold text-rose-500">{passwordMessage}</p>}
                     </div>
