@@ -315,6 +315,7 @@ const statusStyle = {
   "이동 중": "bg-orange-100 text-orange-700",
   "도착 완료": "bg-green-100 text-green-700",
   "귀가 완료": "bg-emerald-100 text-emerald-700",
+  "귀가 중": "bg-orange-100 text-orange-700",
   "위치 확인": "bg-cyan-100 text-cyan-700",
   "수업 중": "bg-purple-100 text-purple-700",
   끝남: "bg-zinc-100 text-zinc-500",
@@ -1597,7 +1598,7 @@ export default function App() {
 
   const updateStatus = (id, status) => {
     const targetSchedule = schedules.find((s) => s.id === id);
-    const futureBlockedStatuses = ["도착 완료", "끝남", "귀가 완료"];
+    const futureBlockedStatuses = ["도착 완료", "끝남", "귀가 완료", "귀가 중"]; 
 
     if (isFutureDate(selectedDate) && futureBlockedStatuses.includes(status)) {
       setStatusConfirm({
@@ -1630,6 +1631,7 @@ export default function App() {
       "도착 완료": "도착 확인이 부모님 화면에 표시됩니다.",
       끝남: "수업이 끝난 것으로 확인됐어요.",
       "귀가 완료": "집에 온 것으로 확인됐어요.",
+      "귀가 중": "집으로 이동 중인 것으로 표시됩니다.",
       "위치 확인": "위치 확인 상태로 저장됐어요.",
       "이동 중": "이동 중으로 저장됐어요.",
       대기: "대기 상태로 바뀌었어요.",
@@ -2719,57 +2721,69 @@ function ChildView({
         />
       )}
 
-      <div className="grid grid-cols-2 gap-1.5">
-        <button
-          type="button"
-          onClick={() => updateStatus(current.id, current.status === "도착 완료" ? "대기" : "도착 완료")}
-          className={`h-10 rounded-[1.1rem] border-2 text-[13px] font-blacklack shadow-[0_6px_16px_rgba(16,185,129,0.14)] transition hover:scale-[1.01] ${
-            current.status === "도착 완료"
-              ? "border-emerald-500 bg-emerald-500 text-white"
-              : "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50 text-emerald-700 hover:border-emerald-300"
-          }`}
-        >
-          {current.status === "도착 완료" ? "✅ 도착 확인됨" : "✅ 도착했어요"}
-        </button>
-        <button
-          type="button"
-          onClick={() => updateStatus(current.id, current.status === "끝남" ? "대기" : "끝남")}
-          className={`h-11 rounded-[1.2rem] border-2 text-sm font-black shadow-[0_6px_16px_rgba(59,130,246,0.14)] transition hover:scale-[1.01] ${
-            current.status === "끝남"
-              ? "border-blue-500 bg-blue-500 text-white"
-              : "border-blue-200 bg-gradient-to-br from-blue-50 via-white to-sky-50 text-blue-700 hover:border-blue-300"
-          }`}
-        >
-          {current.status === "끝남" ? "💙 끝남 확인됨" : "💙 끝났어요"}
-        </button>
-      </div>
-
-      {contacts.length > 0 && (
-        <div className="rounded-[1.35rem] border border-rose-100 bg-white/90 p-1.5 shadow-sm">
+      <div className="rounded-[1.35rem] border border-rose-100 bg-white/90 p-1.5 shadow-sm">
+        <div className="grid grid-cols-2 gap-1.5">
           <button
             type="button"
-            onClick={() => setShowParentContact((prev) => !prev)}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-[1.1rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 text-sm font-black text-rose-600 shadow-[0_6px_16px_rgba(244,114,182,0.14)] transition hover:scale-[1.01] hover:border-rose-300"
+            onClick={() => updateStatus(current.id, current.status === "도착 완료" ? "대기" : "도착 완료")}
+            className={`flex h-10 min-w-0 items-center justify-center rounded-[1.1rem] border-2 px-1 text-center text-[12px] font-black leading-none shadow-[0_6px_16px_rgba(16,185,129,0.14)] transition hover:scale-[1.01] ${
+              current.status === "도착 완료"
+                ? "border-emerald-500 bg-emerald-500 text-white"
+                : "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50 text-emerald-700 hover:border-emerald-300"
+            }`}
           >
-            <Phone size={16} /> 부모님께 연락하기
+            <span className="whitespace-nowrap">{current.status === "도착 완료" ? "✅ 도착 확인" : "✅ 도착했어요"}</span>
           </button>
 
-          {showParentContact && (
-            <div className="mt-2 space-y-2">
-              {contacts.slice(0, 2).map((parent) => (
-                <div key={parent.id || parent.label} className="grid grid-cols-2 gap-2 rounded-2xl bg-rose-50/70 p-2">
-                  <a href={`tel:${parent.phone}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-rose-600 shadow-sm">
-                    {parent.label || parent.name} 전화
-                  </a>
-                  <a href={`sms:${parent.phone}?body=${smsText}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-slate-700 shadow-sm">
-                    {parent.label || parent.name} 문자
-                  </a>
-                </div>
-              ))}
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => updateStatus(current.id, current.status === "끝남" ? "대기" : "끝남")}
+            className={`flex h-10 min-w-0 items-center justify-center rounded-[1.1rem] border-2 px-1 text-center text-[12px] font-black leading-none shadow-[0_6px_16px_rgba(59,130,246,0.14)] transition hover:scale-[1.01] ${
+              current.status === "끝남"
+                ? "border-blue-500 bg-blue-500 text-white"
+                : "border-blue-200 bg-gradient-to-br from-blue-50 via-white to-sky-50 text-blue-700 hover:border-blue-300"
+            }`}
+          >
+            <span className="whitespace-nowrap">{current.status === "끝남" ? "💙 끝남 확인" : "💙 끝났어요"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => updateStatus(current.id, current.status === "귀가 중" ? "대기" : "귀가 중")}
+            className={`flex h-10 min-w-0 items-center justify-center rounded-[1.1rem] border-2 px-1 text-center text-[12px] font-black leading-none shadow-[0_6px_16px_rgba(251,146,60,0.14)] transition hover:scale-[1.01] ${
+              current.status === "귀가 중"
+                ? "border-orange-500 bg-orange-500 text-white"
+                : "border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 text-orange-700 hover:border-orange-300"
+            }`}
+          >
+            <span className="whitespace-nowrap">{current.status === "귀가 중" ? "🏠 귀가 중" : "🏠 집에 가는중"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => contacts.length > 0 && setShowParentContact((prev) => !prev)}
+            disabled={contacts.length === 0}
+            className="flex h-10 min-w-0 items-center justify-center rounded-[1.1rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 px-1 text-center text-[12px] font-black leading-none text-rose-600 shadow-[0_6px_16px_rgba(244,114,182,0.14)] transition hover:scale-[1.01] hover:border-rose-300 disabled:opacity-40"
+          >
+            <span className="whitespace-nowrap">📞 부모님 연락</span>
+          </button>
         </div>
-      )}
+
+        {showParentContact && contacts.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {contacts.slice(0, 2).map((parent) => (
+              <div key={parent.id || parent.label} className="grid grid-cols-2 gap-2 rounded-2xl bg-rose-50/70 p-2">
+                <a href={`tel:${parent.phone}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-rose-600 shadow-sm">
+                  {parent.label || parent.name} 전화
+                </a>
+                <a href={`sms:${parent.phone}?body=${smsText}`} className="flex h-9 items-center justify-center rounded-xl bg-white text-xs font-black text-slate-700 shadow-sm">
+                  {parent.label || parent.name} 문자
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
