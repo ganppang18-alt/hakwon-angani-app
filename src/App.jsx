@@ -1847,33 +1847,16 @@ export default function App() {
       {statusConfirm && <StatusConfirmToast confirm={statusConfirm} onClose={() => setStatusConfirm(null)} />}
 
       <div className="relative z-10 mx-auto max-w-md px-2.5 py-2">
-        <header className="mb-2 rounded-[1.8rem] border border-white/80 bg-white/85 p-3.5 shadow-[0_10px_30px_rgba(244,114,182,0.14)] backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 text-center">
-              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50/80 px-3 py-1 text-[11px] font-black text-rose-500 shadow-sm" style={{ fontFamily: appFontFamily }}>
-                <CalendarDays size={13} /> 초등학생 동선 알림앱 <span className="text-rose-400">♥</span>
-              </div>
-
-              <div className="relative mx-auto inline-block">
-                <div className="absolute -left-1 -top-1 h-3 w-3 rounded-full bg-rose-300/45 blur-[1px]" />
-                <div className="absolute -right-2 bottom-1 h-2.5 w-2.5 rounded-full bg-amber-300/55 blur-[1px]" />
-                <h1
-                  className="relative text-[40px] font-black leading-none text-slate-950"
-                  style={{
-                    fontFamily: appFontFamily,
-                    letterSpacing: "0.14em",
-                    textShadow: "2px 3px 0 rgba(244, 114, 182, 0.20), 0 2px 12px rgba(15,23,42,0.08)",
-                  }}
-                >
-                  학원안가니?
-                </h1>
-                <div className="mx-auto mt-2 h-1.5 w-24 rounded-full bg-gradient-to-r from-rose-400 via-pink-300 to-yellow-200 shadow-sm" />
-              </div>
+        <header className="mb-1.5 rounded-[1.5rem] border border-white/80 bg-white/85 p-2.5 shadow-[0_8px_22px_rgba(244,114,182,0.12)] backdrop-blur">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <div className="inline-flex min-w-0 items-center gap-1 rounded-full border border-rose-100 bg-rose-50/80 px-2.5 py-1 text-[10px] font-black text-rose-500 shadow-sm" style={{ fontFamily: appFontFamily }}>
+              <CalendarDays size={12} />
+              <span className="truncate">초등학생 동선 알림앱</span>
+              <span className="text-rose-400">♥</span>
             </div>
 
-          <div className="mt-0 flex shrink-0 flex-col items-end gap-1.5">
-            <div className="flex items-center gap-1">
-              <p className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-400 shadow-sm">
+            <div className="flex shrink-0 items-center gap-1">
+              <p className="rounded-full bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-400 shadow-sm">
                 {currentUser.name}님
               </p>
               <button
@@ -1884,35 +1867,53 @@ export default function App() {
                 로그아웃
               </button>
             </div>
-            <p className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-400 shadow-sm">
+          </div>
+
+          <div className="relative text-center">
+            <div className="absolute left-8 top-1 h-2.5 w-2.5 rounded-full bg-rose-300/45 blur-[1px]" />
+            <div className="absolute right-10 bottom-1 h-2 w-2 rounded-full bg-amber-300/55 blur-[1px]" />
+            <h1
+              className="relative whitespace-nowrap text-[44px] font-black leading-none text-slate-950"
+              style={{
+                fontFamily: appFontFamily,
+                letterSpacing: "0.01em",
+                textShadow: "2px 3px 0 rgba(244, 114, 182, 0.18), 0 2px 10px rgba(15,23,42,0.08)",
+              }}
+            >
+              학원안가니?
+            </h1>
+            <div className="mx-auto mt-1.5 h-1 w-20 rounded-full bg-gradient-to-r from-rose-400 via-pink-300 to-yellow-200 shadow-sm" />
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-400 shadow-sm">
               {syncStatus}
             </p>
-            <div className="mt-1 grid grid-cols-2 rounded-2xl border border-rose-100 bg-white p-0.5 shadow-sm">
-            <button
-              onClick={() => {
-                setRole("child");
-                setParentAuthenticated(false);
-              }}
-              className={`rounded-xl px-2 py-1 text-[10px] font-black transition ${
-                role === "child" ? "bg-rose-400 text-white shadow" : "text-slate-500"
-              }`}
-            >
-              아이용
-            </button>
-            <button
-              onClick={() => {
-                setRole("parent");
-                if (isParentLockActive) setParentAuthenticated(false);
-              }}
-              className={`rounded-xl px-2 py-1 text-[10px] font-black transition ${
-                role === "parent" ? "bg-rose-400 text-white shadow" : "text-slate-500"
-              }`}
-            >
-              부모용
-            </button>
+            <div className="grid shrink-0 grid-cols-2 rounded-2xl border border-rose-100 bg-white p-0.5 shadow-sm">
+              <button
+                onClick={() => {
+                  setRole("child");
+                  setParentAuthenticated(false);
+                }}
+                className={`rounded-xl px-2.5 py-1 text-[10px] font-black transition ${
+                  role === "child" ? "bg-rose-400 text-white shadow" : "text-slate-500"
+                }`}
+              >
+                아이용
+              </button>
+              <button
+                onClick={() => {
+                  setRole("parent");
+                  if (isParentLockActive) setParentAuthenticated(false);
+                }}
+                className={`rounded-xl px-2.5 py-1 text-[10px] font-black transition ${
+                  role === "parent" ? "bg-rose-400 text-white shadow" : "text-slate-500"
+                }`}
+              >
+                부모용
+              </button>
             </div>
           </div>
-        </div>
         </header>
 
         <div className={`mb-1.5 grid ${appChildren.length === 1 ? "grid-cols-1 justify-items-center" : appChildren.length >= 3 ? "grid-cols-3 gap-1.5" : "grid-cols-2 gap-2"}`}>
@@ -1925,7 +1926,7 @@ export default function App() {
                 key={c.id}
                 type="button"
                 onClick={() => setSelectedChild(c.id)}
-                className={`relative overflow-hidden text-center transition-all duration-200 ${appChildren.length === 1 ? "w-[58%] min-w-[170px] rounded-[22px] px-3 py-2.5" : compactChildCard ? "rounded-[18px] px-1.5 py-2" : "rounded-[22px] px-3 py-2.5"} ${
+                className={`relative overflow-hidden text-center transition-all duration-200 ${appChildren.length === 1 ? "w-[54%] min-w-[150px] rounded-[18px] px-2 py-2" : compactChildCard ? "rounded-[16px] px-1.5 py-1.5" : "rounded-[18px] px-2 py-2"} ${
                   isSelected
                     ? "border-2 border-rose-400 bg-gradient-to-r from-rose-50 via-pink-50 to-white shadow-[0_8px_24px_rgba(244,114,182,0.20)]"
                     : "border border-rose-100 bg-white/90 shadow-sm hover:border-rose-200 hover:bg-rose-50/40"
@@ -1936,15 +1937,15 @@ export default function App() {
                 )}
 
                 <div className={`flex items-center justify-center ${compactChildCard ? "gap-1.5" : "gap-3"}`}>
-                  <div className={compactChildCard ? "scale-[0.78]" : ""}>
+                  <div className={compactChildCard ? "scale-[0.72]" : "scale-[0.86]"}>
                     <ChildAvatar child={c} />
                   </div>
                   <div className="flex min-w-0 flex-col items-start justify-center" style={{ fontFamily: appFontFamily }}>
                     <div className={`flex items-baseline ${compactChildCard ? "gap-1" : "gap-2"}`}>
-                      <span className={`${compactChildCard ? "text-[14px]" : "text-[18px]"} truncate font-black leading-none ${isSelected ? "text-slate-950" : "text-slate-800"}`}>{c.name}</span>
-                      <span className={`${compactChildCard ? "text-[10px]" : "text-[12px]"} shrink-0 font-bold ${isSelected ? "text-rose-500" : "text-slate-400"}`}>{c.grade}</span>
+                      <span className={`${compactChildCard ? "text-[13px]" : "text-[16px]"} truncate font-black leading-none ${isSelected ? "text-slate-950" : "text-slate-800"}`}>{c.name}</span>
+                      <span className={`${compactChildCard ? "text-[9px]" : "text-[11px]"} shrink-0 font-bold ${isSelected ? "text-rose-500" : "text-slate-400"}`}>{c.grade}</span>
                     </div>
-                    <span className={`${compactChildCard ? "mt-0.5 text-[9px]" : "mt-1 text-[10px]"} font-bold ${isSelected ? "text-rose-500" : "text-slate-300"}`}>
+                    <span className={`${compactChildCard ? "mt-0 text-[8px]" : "mt-0.5 text-[9px]"} font-bold ${isSelected ? "text-rose-500" : "text-slate-300"}`}>
                       {isSelected ? "선택됨" : "일정 보기"}
                     </span>
                   </div>
@@ -1964,7 +1965,7 @@ export default function App() {
           />
         )}
 
-        <div className="mb-1.5 grid grid-cols-7 gap-1">
+        <div className="mb-1 grid grid-cols-7 gap-1">
           {days.map((day) => (
             <button
               key={day}
@@ -1973,7 +1974,7 @@ export default function App() {
                 if (target) setSelectedDate(target);
                 setSelectedDay(day);
               }}
-              className={`rounded-2xl py-1.5 text-[11px] font-black transition ${
+              className={`rounded-2xl py-1.5 text-[10px] font-black transition ${
                 selectedDay === day ? "bg-rose-400 text-white shadow" : "border border-rose-100 bg-white/80 text-slate-500"
               }`}
             >
@@ -2082,6 +2083,11 @@ export default function App() {
                 addNotice={addNotice}
                 deleteNotice={deleteNotice}
                 role={role}
+                onOpenScheduleAdd={() => {
+                  setActiveMenu("home");
+                  setRole("parent");
+                  setShowAdd(true);
+                }}
               />
             )}
 
@@ -2102,6 +2108,14 @@ export default function App() {
                 setFamilyCodeInput={setFamilyCodeInput}
                 onApplyFamilyShareCode={applyFamilyShareCode}
                 role={role}
+                onOpenScheduleAdd={() => {
+                  const hasRegisteredChild = (familyInfo?.children || []).some((child) => child?.name?.trim());
+                  if (!hasRegisteredChild) return false;
+                  setActiveMenu("home");
+                  setRole("parent");
+                  setShowAdd(true);
+                  return true;
+                }}
               />
             )}
           </>
@@ -2352,13 +2366,13 @@ function TodayDateBadge({ todayDateLabel, onClick }) {
       <button
         type="button"
         onClick={onClick}
-        className="group flex w-full max-w-[300px] items-center justify-center gap-2 rounded-[1.4rem] border-2 border-rose-200 bg-white px-4 py-2.5 text-[13px] font-black text-rose-500 shadow-[0_8px_22px_rgba(244,114,182,0.18)] transition hover:border-rose-300 hover:bg-rose-50"
+        className="group flex w-full max-w-[270px] items-center justify-center gap-1.5 rounded-[1.25rem] border-2 border-rose-200 bg-white px-3 py-2 text-[12px] font-black text-rose-500 shadow-[0_6px_16px_rgba(244,114,182,0.15)] transition hover:border-rose-300 hover:bg-rose-50"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-500 transition group-hover:bg-rose-200">
-          <CalendarDays size={17} />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-500 transition group-hover:bg-rose-200">
+          <CalendarDays size={15} />
         </span>
         <span className="truncate">{todayDateLabel}</span>
-        <span className="shrink-0 rounded-full bg-rose-400 px-2 py-1 text-[10px] font-black text-white shadow-sm">
+        <span className="shrink-0 rounded-full bg-rose-400 px-1.5 py-0.5 text-[9px] font-black text-white shadow-sm">
           달력
         </span>
       </button>
@@ -2519,12 +2533,12 @@ function MainMenu({ activeMenu, setActiveMenu }) {
   ];
 
   return (
-    <div className="mb-1.5 grid grid-cols-4 rounded-3xl border border-rose-100 bg-white/80 p-1 shadow-sm">
+    <div className="mb-1 grid grid-cols-4 rounded-3xl border border-rose-100 bg-white/80 p-0.5 shadow-sm">
       {menus.map((menu) => (
         <button
           key={menu.id}
           onClick={() => setActiveMenu(menu.id)}
-          className={`flex items-center justify-center gap-1 rounded-2xl py-2 text-[11px] font-black transition ${
+          className={`flex items-center justify-center gap-1 rounded-2xl py-1.5 text-[10px] font-black transition ${
             activeMenu === menu.id ? "bg-rose-400 text-white shadow" : "text-slate-500"
           }`}
         >
@@ -2598,58 +2612,51 @@ function ChildView({
 
       <Card className="overflow-hidden rounded-[1.7rem] border border-rose-100 bg-white/95 shadow-[0_10px_24px_rgba(244,114,182,0.12)]">
         <CardContent className="p-3">
-          <div className="mb-2 grid grid-cols-[1fr_auto_1fr] items-start gap-2">
-            <div className="justify-self-start truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
               {child.name} · {child.grade}
-            </div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1.5 shadow-sm">
-              <span className="text-base">⭐</span>
-              <span className="text-[16px] font-black tracking-[0.08em] text-rose-500">오늘의 일정</span>
             </div>
             <button
               type="button"
               onClick={() => setShowAdd((prev) => !prev)}
-              className="justify-self-end truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm transition hover:bg-rose-50"
+              className="shrink-0 rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm transition hover:bg-rose-50"
             >
               일정 직접 입력
             </button>
           </div>
 
-          <div className="mb-2 rounded-[1.4rem] bg-gradient-to-br from-white via-rose-50/80 to-white p-2.5 shadow-sm">
-            <div className="relative mb-2 text-center">
-              <div className="absolute left-0 top-1 flex items-center gap-1.5">
-                <span className="text-base">🗓️</span>
-                <p className="text-sm font-black text-rose-500">지금 할 일</p>
-              </div>
-              <h2 className="truncate text-[38px] font-black leading-none tracking-tight text-rose-500">
-                {current.title}
-              </h2>
-              <div className="mx-auto mt-1 h-1 w-24 rounded-full bg-yellow-300/80" />
+          <div className="mb-2 rounded-[1.45rem] bg-gradient-to-br from-white via-rose-50/80 to-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center gap-1.5">
+              <span className="text-base">🗓️</span>
+              <p className="text-sm font-black text-rose-500">지금 할 일</p>
             </div>
 
-            <div className="grid grid-cols-2 items-stretch gap-2">
-              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-2.5 py-2.5 text-center shadow-[0_6px_16px_rgba(14,165,233,0.16)]">
+            <div className="mb-3 text-center">
+              <h2 className="truncate text-[40px] font-black leading-none tracking-tight text-rose-500">
+                {current.title}
+              </h2>
+              <div className="mx-auto mt-1.5 h-1.5 w-24 rounded-full bg-yellow-300/80" />
+            </div>
+
+            <div className="grid grid-cols-[0.9fr_1.1fr] items-stretch gap-2">
+              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-2 py-3 text-center shadow-[0_6px_16px_rgba(14,165,233,0.16)]">
                 <div className="mb-0.5 flex items-center justify-center gap-1">
                   <span className="text-base leading-none">📍</span>
                   <span className="text-[12px] font-black text-sky-500">장소</span>
                 </div>
-                <p className="truncate text-[17px] font-black text-slate-950">{current.place}</p>
+                <p className="truncate text-[15px] font-black text-slate-950">{current.place}</p>
               </div>
 
-              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 px-2.5 py-2.5 text-center shadow-[0_6px_16px_rgba(244,114,182,0.16)]">
+              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 px-2 py-3 text-center shadow-[0_6px_16px_rgba(244,114,182,0.16)]">
                 <div className="mb-0.5 flex items-center justify-center gap-1">
                   <span className="text-base leading-none">🕒</span>
                   <span className="text-[12px] font-black text-rose-500">시간</span>
                 </div>
-                <p className="truncate text-[17px] font-black leading-tight text-rose-700">{formatKoreanTimeRange(current.start, current.end)}</p>
+                <p className="whitespace-normal break-keep text-[15px] font-black leading-tight text-rose-700">
+                  {formatKoreanTimeRange(current.start, current.end).replace(" ~ ", "~")}
+                </p>
               </div>
             </div>
-          </div>
-
-          <div className="mb-2 grid grid-cols-3 gap-1.5">
-            <MiniScheduleInfo icon="🔔" label="알림" value={current.alert} tone="amber" compact />
-            <MiniScheduleInfo icon="👟" label="이동" value={current.transport} tone="emerald" compact />
-            <MiniScheduleInfo icon="🎒" label="준비물" value={current.items} tone="violet" compact />
           </div>
 
           <div className="rounded-[1.4rem] border border-violet-100 bg-violet-50/70 p-2.5 shadow-sm">
@@ -2791,23 +2798,26 @@ function ParentView({
   onSelectUpcomingSchedule,
 }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="rounded-[2rem] border border-rose-100 bg-white/90 shadow-lg shadow-rose-100/70">
-        <CardContent className="p-4">
-          <div className="mb-4">
-            <div className="mb-3">
-              <p className="text-sm text-slate-500">부모 확인 화면</p>
-              <h2 className="text-2xl font-black">{child.name} {selectedDay}요일 일정</h2>
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+      <Card className="rounded-[1.7rem] border border-rose-100 bg-white/95 shadow-[0_10px_24px_rgba(244,114,182,0.12)]">
+        <CardContent className="p-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[11px] font-black text-rose-400">부모용 홈</p>
+              <h2 className="truncate text-xl font-black text-slate-900">{child.name} 일정 관리</h2>
             </div>
-            <Button
-              className="h-12 w-full rounded-2xl text-sm font-black"
+            <button
+              type="button"
               onClick={() => {
                 if (showAdd) cancelScheduleForm();
                 else setShowAdd(true);
               }}
+              className={`shrink-0 rounded-2xl px-3 py-2 text-xs font-black shadow-sm transition ${
+                showAdd ? "bg-slate-100 text-slate-500" : "bg-rose-400 text-white hover:bg-rose-500"
+              }`}
             >
-              <Plus size={18} className="mr-1" /> 일정 추가
-            </Button>
+              {showAdd ? "작성 접기" : "+ 일정 추가"}
+            </button>
           </div>
 
           {showAdd && (
@@ -2825,76 +2835,95 @@ function ParentView({
             />
           )}
 
-          <section className="rounded-3xl border border-slate-100 bg-white p-3 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <p className="text-base font-black text-slate-900">오늘의 일정</p>
-                <p className="mt-0.5 text-xs font-bold text-slate-400">선택한 날짜에 실제로 확인할 일정입니다.</p>
+          <section className="rounded-[1.4rem] border-2 border-sky-100 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-2.5 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">📌</span>
+                <p className="text-sm font-black text-sky-600">오늘 일정</p>
               </div>
-              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] font-black text-slate-500">
-                {schedules.length}개
-              </span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-sky-600 shadow-sm">{schedules.length}개</span>
             </div>
 
-            <div className="space-y-3">
-              {schedules.length === 0 && (
-                <div className="rounded-2xl bg-slate-50 p-4 text-center text-sm font-bold text-slate-400">
-                  선택한 날짜에 표시할 일정이 없습니다.
-                </div>
-              )}
-              {schedules.map((s) => (
-              <div key={s.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-black">{s.title}</p>
-                    <p className="text-sm text-slate-500">{formatKoreanTimeRange(s.start, s.end)}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle[s.status] || "bg-slate-100 text-slate-700"}`}>{s.status}</span>
-                    <button type="button" onClick={() => requestDeleteSchedule(s, `today-${s.id}`)} className="rounded-full bg-white p-2 text-red-400 shadow-sm hover:bg-red-50" title="일정 삭제">
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-                {deleteTarget?.deleteKey === `today-${s.id}` && <DeleteConfirmBox schedule={deleteTarget} onCancel={cancelDeleteSchedule} onConfirm={confirmDeleteSchedule} />}
-                <p className="mb-1 flex items-center gap-1 text-sm text-slate-700"><MapPin size={15} /> {s.place}</p>
-                <p className="mb-2 text-sm text-slate-500">이동: {s.transport} · 준비물: {s.items}</p>
-                {locationChecks?.[s.id] && (
-                  <p className="mb-3 rounded-2xl bg-cyan-50 p-2 text-xs font-bold text-cyan-700">
-                    위치 확인: {locationChecks[s.id].place || s.place} · {locationChecks[s.id].time} · 위치 상태: {getLocationAccuracyLabel(locationChecks[s.id].accuracy)}
-                  </p>
-                )}
-                <div className="mb-2 grid grid-cols-2 gap-2">
-                  <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => startEditSchedule(s)}><Pencil size={14} className="mr-1" /> 수정</Button>
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "대기")}>대기 상태로</Button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "도착 완료")}>도착</Button>
-                  <Button size="sm" variant="outline" className="rounded-xl" onClick={() => updateStatus(s.id, "끝남")}>끝남</Button>
-                </div>
+            {schedules.length === 0 ? (
+              <div className="rounded-2xl bg-white/80 p-4 text-center shadow-sm">
+                <p className="text-sm font-black text-slate-700">선택한 날짜에 일정이 없습니다.</p>
+                <p className="mt-1 text-xs font-bold text-slate-400">필요하면 위의 일정 추가 버튼으로 등록하세요.</p>
               </div>
-              ))}
-            </div>
+            ) : (
+              <div className="space-y-2">
+                {schedules.map((s) => (
+                  <div key={s.id} className="rounded-2xl border border-sky-100 bg-white p-3 shadow-sm">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-black text-sky-600">{formatKoreanTimeRange(s.start, s.end)}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${statusStyle[s.status] || "bg-slate-100 text-slate-700"}`}>{s.status}</span>
+                        </div>
+                        <p className="truncate text-base font-black text-slate-900">{s.title}</p>
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs font-bold text-slate-500"><MapPin size={13} /> {s.place}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => requestDeleteSchedule(s, `today-${s.id}`)}
+                        className="shrink-0 rounded-full bg-red-50 p-2 text-red-400 hover:bg-red-100"
+                        title="일정 삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    {deleteTarget?.deleteKey === `today-${s.id}` && <DeleteConfirmBox schedule={deleteTarget} onCancel={cancelDeleteSchedule} onConfirm={confirmDeleteSchedule} />}
+
+                    {locationChecks?.[s.id] && (
+                      <p className="mb-2 rounded-2xl bg-cyan-50 p-2 text-[11px] font-bold text-cyan-700">
+                        위치 확인: {locationChecks[s.id].place || s.place} · {locationChecks[s.id].time}
+                      </p>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button type="button" onClick={() => startEditSchedule(s)} className="h-9 rounded-xl border border-emerald-100 bg-emerald-50 text-xs font-black text-emerald-700">
+                        수정
+                      </button>
+                      <button type="button" onClick={() => updateStatus(s.id, "도착 완료")} className="h-9 rounded-xl border border-sky-100 bg-sky-50 text-xs font-black text-sky-700">
+                        도착
+                      </button>
+                      <button type="button" onClick={() => updateStatus(s.id, "끝남")} className="h-9 rounded-xl border border-violet-100 bg-violet-50 text-xs font-black text-violet-700">
+                        끝남
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
+        </CardContent>
+      </Card>
 
-          {upcomingSchedules?.length > 0 && (
-            <section className="mt-4 rounded-3xl border-2 border-rose-100 bg-rose-50/70 p-3 shadow-sm">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-base font-black text-slate-900">향후 2주간 일정</p>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-rose-500 shadow-sm">향후 2주간 일정이 나옵니다.</span>
-                  </div>
-                  <p className="mt-0.5 text-xs font-bold text-rose-500">오늘 이후의 다음 일정을 확인할 수 있어요.</p>
+      <Card className="rounded-[1.7rem] border border-rose-100 bg-white/95 shadow-[0_10px_24px_rgba(244,114,182,0.10)]">
+        <CardContent className="p-3">
+          <section className="rounded-[1.4rem] border-2 border-rose-100 bg-gradient-to-br from-rose-50 via-white to-pink-50 p-2.5 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">🗓️</span>
+                  <p className="text-sm font-black text-rose-500">향후 2주 일정</p>
                 </div>
-                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">{upcomingSchedules.length}개</span>
+                <p className="mt-0.5 text-[10px] font-bold text-rose-400">오늘 이후 등록된 일정을 관리합니다.</p>
               </div>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-rose-500 shadow-sm">{upcomingSchedules?.length || 0}개</span>
+            </div>
+
+            {!upcomingSchedules?.length ? (
+              <div className="rounded-2xl bg-white/80 p-4 text-center shadow-sm">
+                <p className="text-sm font-black text-slate-700">향후 2주 일정이 없습니다.</p>
+              </div>
+            ) : (
               <div className="space-y-2">
                 {upcomingSchedules.map((schedule) => (
                   <div key={`${schedule.id}-${schedule.displayDateKey}`} className="rounded-2xl bg-white p-3 shadow-sm">
                     <button type="button" onClick={() => onSelectUpcomingSchedule?.(schedule)} className="mb-2 flex w-full items-center justify-between gap-3 text-left">
                       <div className="min-w-0">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <div className="mb-1 flex flex-wrap items-center gap-1.5">
                           <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{schedule.displayDate}</span>
                           {getScheduleRepeatType(schedule) !== "once" && (
                             <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-black text-orange-500">{getRepeatLabel(getScheduleRepeatType(schedule), schedule.day)}</span>
@@ -2906,15 +2935,19 @@ function ParentView({
                       <span className="shrink-0 rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-400">보기</span>
                     </button>
                     <div className="grid grid-cols-2 gap-2">
-                      <Button size="sm" variant="outline" className="rounded-xl border-emerald-200 bg-white text-emerald-700" onClick={() => startEditSchedule(schedule)}><Pencil size={14} className="mr-1" /> 수정</Button>
-                      <Button size="sm" variant="outline" className="rounded-xl border-red-200 bg-white text-red-600" onClick={() => requestDeleteSchedule(schedule, `${schedule.id}-${schedule.displayDateKey}`)}><Trash2 size={14} className="mr-1" /> 삭제</Button>
+                      <button type="button" onClick={() => startEditSchedule(schedule)} className="h-9 rounded-xl border border-emerald-100 bg-emerald-50 text-xs font-black text-emerald-700">
+                        수정
+                      </button>
+                      <button type="button" onClick={() => requestDeleteSchedule(schedule, `${schedule.id}-${schedule.displayDateKey}`)} className="h-9 rounded-xl border border-red-100 bg-red-50 text-xs font-black text-red-500">
+                        삭제
+                      </button>
                     </div>
                     {deleteTarget?.deleteKey === `${schedule.id}-${schedule.displayDateKey}` && <DeleteConfirmBox schedule={deleteTarget} onCancel={cancelDeleteSchedule} onConfirm={confirmDeleteSchedule} />}
                   </div>
                 ))}
               </div>
-            </section>
-          )}
+            )}
+          </section>
         </CardContent>
       </Card>
     </motion.div>
@@ -3143,6 +3176,7 @@ function WebAppGuidePanel({
   setFamilyCodeInput,
   onApplyFamilyShareCode,
   role,
+  onOpenScheduleAdd,
 }) {
   const canEditSettings = role === "parent";
   const [selectedSetting, setSelectedSetting] = useState(null);
@@ -3248,6 +3282,69 @@ function WebAppGuidePanel({
             설정 내용은 확인만 할 수 있어요. 수정은 부모용 화면에서 가능합니다.
           </div>
         )}
+
+        <section className="mb-4 rounded-[1.7rem] border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-rose-50 p-4 shadow-sm">
+          <div className="mb-3">
+            <p className="text-xs font-black text-amber-500">처음 사용하는 가족을 위한 안내</p>
+            <h3 className="mt-1 text-lg font-black text-slate-900">처음 시작 가이드</h3>
+            <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-500">
+              아래 3단계만 따라 하면 바로 사용할 수 있어요.
+            </p>
+          </div>
+
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={() => setSelectedSetting("profile")}
+              className="flex w-full items-start gap-3 rounded-2xl border border-rose-100 bg-white p-3 text-left shadow-sm transition hover:bg-rose-50"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-400 text-xs font-black text-white">
+                1
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">아이 등록</p>
+                <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-500">
+                  아이 이름, 학년, 연락처를 먼저 입력하세요.
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const opened = onOpenScheduleAdd?.();
+                if (opened === false) setSelectedSetting("profile");
+              }}
+              className="flex w-full items-start gap-3 rounded-2xl border border-sky-100 bg-white p-3 text-left shadow-sm transition hover:bg-sky-50"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-400 text-xs font-black text-white">
+                2
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">일정 추가</p>
+                <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-500">
+                  아이 등록 후 누르면 부모용 홈의 일정 추가 화면으로 바로 이동합니다.
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedSetting("parentLock")}
+              className="flex w-full items-start gap-3 rounded-2xl border border-violet-100 bg-white p-3 text-left shadow-sm transition hover:bg-violet-50"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-400 text-xs font-black text-white">
+                3
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">부모용 잠금</p>
+                <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-500">
+                  부모용 화면에 비밀번호를 설정해 아이의 실수 입력을 막으세요.
+                </p>
+              </div>
+            </button>
+          </div>
+        </section>
 
         <div className="space-y-2">
           {settingItems.map((item) => (
