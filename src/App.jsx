@@ -2686,21 +2686,21 @@ function ChildView({
               <div className="mx-auto mt-1 h-1 w-20 rounded-full bg-yellow-300/80" />
             </div>
 
-            <div className="grid grid-cols-[0.9fr_1.1fr] items-stretch gap-1.5">
+            <div className="grid grid-cols-2 items-stretch gap-1.5">
               <div className="flex min-w-0 flex-col justify-center rounded-[1.1rem] border-2 border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-2 py-2.5 text-center shadow-[0_6px_16px_rgba(14,165,233,0.16)]">
                 <div className="mb-0.5 flex items-center justify-center gap-1">
                   <span className="text-sm leading-none">📍</span>
-                  <span className="text-[11px] font-black text-sky-500">장소</span>
+                  <span className="text-[12px] font-black text-sky-500">장소</span>
                 </div>
-                <p className="truncate text-[14px] font-black text-slate-950">{current.place}</p>
+                <p className="truncate text-[15px] font-black text-slate-950">{current.place}</p>
               </div>
 
               <div className="flex min-w-0 flex-col justify-center rounded-[1.1rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 px-2 py-2.5 text-center shadow-[0_6px_16px_rgba(244,114,182,0.16)]">
                 <div className="mb-0.5 flex items-center justify-center gap-1">
                   <span className="text-sm leading-none">🕒</span>
-                  <span className="text-[11px] font-black text-rose-500">시간</span>
+                  <span className="text-[12px] font-black text-rose-500">시간</span>
                 </div>
-                <p className="whitespace-normal break-keep text-[14px] font-black leading-tight text-rose-700">
+                <p className="whitespace-normal break-keep text-[15px] font-black leading-tight text-rose-700">
                   {formatKoreanTimeRange(current.start, current.end).replace(" ~ ", "~")}
                 </p>
               </div>
@@ -3255,6 +3255,8 @@ function WebAppGuidePanel({
 }) {
   const canEditSettings = role === "parent";
   const [selectedSetting, setSelectedSetting] = useState(null);
+  const [showStartGuideMenu, setShowStartGuideMenu] = useState(false);
+  const [selectedStartGuide, setSelectedStartGuide] = useState(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [deleteChildConfirmIndex, setDeleteChildConfirmIndex] = useState(null);
@@ -3359,19 +3361,37 @@ function WebAppGuidePanel({
         )}
 
         <section className="mb-4 rounded-[1.7rem] border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-rose-50 p-4 shadow-sm">
-          <div className="mb-3">
-            <p className="text-xs font-black text-amber-500">처음 사용하는 가족을 위한 안내</p>
-            <h3 className="mt-1 text-lg font-black text-slate-900">처음 시작 가이드</h3>
-            <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-500">
-              아래 3단계만 따라 하면 바로 사용할 수 있어요.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowStartGuideMenu((prev) => !prev);
+              setSelectedStartGuide(null);
+            }}
+            className={`flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm transition ${showStartGuideMenu ? "border-amber-300 bg-amber-50" : "border-amber-100 bg-white hover:bg-amber-50"}`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400 text-lg text-white shadow-sm">
+                🚀
+              </div>
+              <div>
+                <p className="text-xs font-black text-amber-500">처음 사용하는 가족을 위한 안내</p>
+                <h3 className="mt-0.5 text-lg font-black text-slate-900">처음 시작 가이드</h3>
+                <p className="mt-0.5 break-keep text-xs font-bold leading-5 text-slate-500">
+                  눌러서 기본 설정 순서를 확인하세요.
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-500 shadow-sm">
+              {showStartGuideMenu ? "접기" : "열기"}
+            </span>
+          </button>
 
-          <div className="space-y-2.5">
+          {showStartGuideMenu && (
+            <div className="mt-3 space-y-2.5">
             <button
               type="button"
-              onClick={() => setSelectedSetting("profile")}
-              className="flex w-full items-start gap-3 rounded-2xl border border-rose-100 bg-white p-3 text-left shadow-sm transition hover:bg-rose-50"
+              onClick={() => setSelectedStartGuide((prev) => (prev === "child" ? null : "child"))}
+              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left shadow-sm transition ${selectedStartGuide === "child" ? "border-rose-300 bg-rose-50" : "border-rose-100 bg-white hover:bg-rose-50"}`}
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-400 text-xs font-black text-white">
                 1
@@ -3384,13 +3404,27 @@ function WebAppGuidePanel({
               </div>
             </button>
 
+            {selectedStartGuide === "child" && (
+              <div className="rounded-2xl border border-rose-100 bg-white p-3 text-xs font-bold leading-5 text-slate-600 shadow-sm">
+                <p className="mb-2 text-sm font-black text-rose-600">아이 등록 안내</p>
+                <p>처음에는 샘플 아이가 보입니다. 실제 사용 전에는 아이 이름과 학년을 우리 아이 정보로 바꿔주세요.</p>
+                <div className="mt-2 rounded-xl bg-rose-50 p-2 text-rose-600">
+                  설정 위치: 설정 목록 → 내정보관리 → 아이 정보
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSetting("profile")}
+                  className="mt-3 h-9 w-full rounded-2xl bg-rose-400 text-xs font-black text-white shadow-sm"
+                >
+                  아이 등록하러 가기
+                </button>
+              </div>
+            )}
+
             <button
               type="button"
-              onClick={() => {
-                const opened = onOpenScheduleAdd?.();
-                if (opened === false) setSelectedSetting("profile");
-              }}
-              className="flex w-full items-start gap-3 rounded-2xl border border-sky-100 bg-white p-3 text-left shadow-sm transition hover:bg-sky-50"
+              onClick={() => setSelectedStartGuide((prev) => (prev === "schedule" ? null : "schedule"))}
+              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left shadow-sm transition ${selectedStartGuide === "schedule" ? "border-sky-300 bg-sky-50" : "border-sky-100 bg-white hover:bg-sky-50"}`}
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-400 text-xs font-black text-white">
                 2
@@ -3403,10 +3437,30 @@ function WebAppGuidePanel({
               </div>
             </button>
 
+            {selectedStartGuide === "schedule" && (
+              <div className="rounded-2xl border border-sky-100 bg-white p-3 text-xs font-bold leading-5 text-slate-600 shadow-sm">
+                <p className="mb-2 text-sm font-black text-sky-600">일정 추가 안내</p>
+                <p>아이 등록을 마친 뒤 학원, 방과후수업, 운동 일정을 등록합니다. 과목명, 시간, 장소만 입력해도 바로 사용할 수 있어요.</p>
+                <div className="mt-2 rounded-xl bg-sky-50 p-2 text-sky-600">
+                  반복 일정은 매주 반복, 월~금 반복으로 등록할 수 있습니다.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const opened = onOpenScheduleAdd?.();
+                    if (opened === false) setSelectedSetting("profile");
+                  }}
+                  className="mt-3 h-9 w-full rounded-2xl bg-sky-400 text-xs font-black text-white shadow-sm"
+                >
+                  일정 추가하러 가기
+                </button>
+              </div>
+            )}
+
             <button
               type="button"
-              onClick={() => setSelectedSetting("parentLock")}
-              className="flex w-full items-start gap-3 rounded-2xl border border-violet-100 bg-white p-3 text-left shadow-sm transition hover:bg-violet-50"
+              onClick={() => setSelectedStartGuide((prev) => (prev === "lock" ? null : "lock"))}
+              className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left shadow-sm transition ${selectedStartGuide === "lock" ? "border-violet-300 bg-violet-50" : "border-violet-100 bg-white hover:bg-violet-50"}`}
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-400 text-xs font-black text-white">
                 3
@@ -3418,7 +3472,25 @@ function WebAppGuidePanel({
                 </p>
               </div>
             </button>
-          </div>
+
+            {selectedStartGuide === "lock" && (
+              <div className="rounded-2xl border border-violet-100 bg-white p-3 text-xs font-bold leading-5 text-slate-600 shadow-sm">
+                <p className="mb-2 text-sm font-black text-violet-600">부모용 잠금 안내</p>
+                <p>부모용 화면은 일정 추가, 수정, 삭제가 가능하므로 아이가 실수로 바꾸지 않게 비밀번호를 설정하는 것이 좋습니다.</p>
+                <div className="mt-2 rounded-xl bg-violet-50 p-2 text-violet-600">
+                  비밀번호는 4자리 이상으로 만들 수 있습니다.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSetting("parentLock")}
+                  className="mt-3 h-9 w-full rounded-2xl bg-violet-400 text-xs font-black text-white shadow-sm"
+                >
+                  부모용 잠금 설정하기
+                </button>
+              </div>
+            )}
+            </div>
+          )}
         </section>
 
         <div className="space-y-2">
