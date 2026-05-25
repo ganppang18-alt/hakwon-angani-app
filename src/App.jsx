@@ -639,23 +639,40 @@ function getCurrentScheduleForChildHome(schedules, childId, selectedDay, nowMinu
 
   if (childSchedules.length === 0) return null;
 
+  const ongoing = childSchedules.find(
+    (s) => nowMinutes >= timeToMinutes(s.start) && nowMinutes <= timeToMinutes(s.end || s.start)
+  );
+  if (ongoing) return ongoing;
+
   const nextWithin30 = childSchedules.find((s) => {
     const startMinutes = timeToMinutes(s.start);
     return nowMinutes < startMinutes && startMinutes - nowMinutes <= beforeMinutes;
   });
   if (nextWithin30) return nextWithin30;
 
-  const ongoing = childSchedules.find(
-    (s) => nowMinutes >= timeToMinutes(s.start) && nowMinutes <= timeToMinutes(s.end)
-  );
-  if (ongoing) return ongoing;
-
-  const previousSchedules = childSchedules.filter((s) => timeToMinutes(s.start) <= nowMinutes);
-  if (previousSchedules.length > 0) {
-    return previousSchedules[previousSchedules.length - 1];
+  const nextFuture = childSchedules.find((s) => timeToMinutes(s.start) > nowMinutes);
+  if (nextFuture) {
+    const previousSchedules = childSchedules.filter((s) => timeToMinutes(s.start) <= nowMinutes);
+    return previousSchedules.length > 0 ? previousSchedules[previousSchedules.length - 1] : null;
   }
 
   return null;
+}
+
+function areAllTodaySchedulesFinished(schedules, nowMinutes = getNowMinutes()) {
+  const todayList = [...(schedules || [])]
+    .filter((s) => s && s.start)
+    .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+  if (todayList.length === 0) return false;
+
+  const hasFutureSchedule = todayList.some((s) => timeToMinutes(s.start) > nowMinutes);
+  if (hasFutureSchedule) return false;
+
+  const lastSchedule = todayList[todayList.length - 1];
+  const lastEndMinutes = timeToMinutes(lastSchedule.end || lastSchedule.start);
+
+  return lastEndMinutes <= nowMinutes || ["끝남", "귀가 완료", "귀가 중"].includes(lastSchedule.status);
 }
 
 function getNextRemainingSchedule(schedules, nowMinutes = getNowMinutes(), excludeId = null) {
@@ -1440,12 +1457,18 @@ export default function App() {
     });
   }, [todaySchedules, nowTick, selectedDate]);
 
+  const allFinishedToday = useMemo(
+    () => isTodayDate(selectedDate) && areAllTodaySchedulesFinished(visibleSchedules, getNowMinutes(new Date(nowTick))),
+    [visibleSchedules, selectedDate, nowTick]
+  );
+
   const current = useMemo(() => {
+    if (allFinishedToday) return null;
     if (isFutureDate(selectedDate)) {
       return visibleSchedules[0] || null;
     }
     return getCurrentScheduleForChildHome(visibleSchedules, selectedChild, selectedDay, getNowMinutes(new Date(nowTick)), 30);
-  }, [visibleSchedules, selectedChild, selectedDay, selectedDate, nowTick]);
+  }, [visibleSchedules, selectedChild, selectedDay, selectedDate, nowTick, allFinishedToday]);
 
   const activeAlerts = useMemo(
     () => getActiveAlerts(visibleSchedules, selectedChild, selectedDay),
@@ -1522,15 +1545,27 @@ export default function App() {
     ].slice(0, 5));
   };
   const weekDates = useMemo(() => {
-    const monday = getMondayOfWeek(selectedDate);
+    const isChildSundayToday = role === "child" && isTodayDate(selectedDate) && getTodayKoreanDay(selectedDate) === "일";
+    const baseDate = isChildSundayToday ? addDays(selectedDate, 1) : selectedDate;
+    const monday = getMondayOfWeek(baseDate);
     return days.map((day, index) => ({ day, date: addDays(monday, index) }));
-  }, [selectedDate]);
+  }, [selectedDate, role]);
 
   const selectCalendarDate = (date) => {
     setSelectedDate(date);
     setSelectedDay(getTodayKoreanDay(date));
     setShowCalendar(false);
   };
+
+  useEffect(() => {
+    if (role !== "child") return;
+    if (!isTodayDate(selectedDate)) return;
+    if (getTodayKoreanDay(selectedDate) !== "일") return;
+
+    const nextMonday = addDays(selectedDate, 1);
+    setSelectedDate(nextMonday);
+    setSelectedDay("월");
+  }, [role, selectedDate]);
 
   useEffect(() => {
     if (!notificationEnabled) return;
@@ -2077,6 +2112,7 @@ export default function App() {
                   cancelScheduleForm={cancelScheduleForm}
                   selectedDateLabel={todayDateLabel}
                   selectedDate={selectedDate}
+                  allFinishedToday={allFinishedToday}
                   selectedDay={selectedDay}
                   upcomingSchedules={upcomingSchedules}
                   onSelectUpcomingSchedule={(schedule) => {
@@ -2625,6 +2661,7 @@ function ChildView({
   updateStatus,
   schedules,
   selectedDate,
+  allFinishedToday,
   parentContacts,
   showAdd,
   setShowAdd,
@@ -2637,6 +2674,58 @@ function ChildView({
   const [showParentContact, setShowParentContact] = useState(false);
   const contacts = parentContacts?.filter((parent) => parent.phone?.trim()) || [];
   const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
+  const childHomeFinished =
+    allFinishedToday ||
+    (isTodayDate(selectedDate) &&
+      (schedules || []).length > 0 &&
+      getRemainingSchedules(schedules, getNowMinutes()).length === 0);
+
+  if (childHomeFinished) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+        <Card className="rounded-[1.55rem] border border-emerald-100 bg-white/95 shadow-[0_8px_20px_rgba(16,185,129,0.11)]">
+          <CardContent className="p-3 text-center">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="truncate rounded-full border border-emerald-100 bg-white/90 px-2 py-1 text-[10px] font-black text-emerald-600 shadow-sm">
+                {child.name} · {child.grade}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdd((prev) => !prev)}
+                className="shrink-0 rounded-full border border-emerald-100 bg-white/90 px-2 py-1 text-[10px] font-black text-emerald-600 shadow-sm transition hover:bg-emerald-50"
+              >
+                일정 직접 입력
+              </button>
+            </div>
+            <div className="rounded-[1.4rem] bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-5 shadow-sm">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-2xl text-white shadow-sm">
+                ✓
+              </div>
+              <p className="text-sm font-black text-emerald-500">오늘의 일정</p>
+              <h2 className="mt-1 break-keep text-2xl font-black text-slate-900">오늘 일정 잘 마무리 했어요</h2>
+              <p className="mt-2 break-keep text-xs font-bold leading-5 text-slate-500">
+                오늘 가야 할 일정은 모두 끝났어요. 편하게 쉬어도 괜찮아요.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {showAdd && (
+          <ChildScheduleAddBox
+            showAdd={showAdd}
+            setShowAdd={setShowAdd}
+            newSchedule={newSchedule}
+            updateNewSchedule={updateNewSchedule}
+            addSchedule={addSchedule}
+            cancelScheduleForm={cancelScheduleForm}
+            selectedDateLabel={selectedDateLabel}
+            child={child}
+            selectedDay={selectedDay}
+          />
+        )}
+      </motion.div>
+    );
+  }
 
   if (!current) {
     const nextSchedules = getRemainingSchedules(schedules, isTodayDate(selectedDate) ? getNowMinutes() : 0);
