@@ -71,12 +71,11 @@ function Button({ className = "", variant = "default", size = "default", disable
 
 const defaultFamilyInfo = {
   parents: [
-    { id: "dad", label: "아빠", name: "아빠", phone: "01088337590" },
-    { id: "mom", label: "엄마", name: "엄마", phone: "01027460913" },
+    { id: "dad", label: "아빠", name: "아빠", phone: "" },
+    { id: "mom", label: "엄마", name: "엄마", phone: "" },
   ],
   children: [
-    { id: "donghun", name: "동훈", grade: "초5", phone: "", avatarTheme: "rose" },
-    { id: "dongjun", name: "동준", grade: "초3", phone: "", avatarTheme: "sky" },
+    { id: "sample-child", name: "김학원", grade: "초5", phone: "", avatarTheme: "rose" },
   ],
 };
 
@@ -84,221 +83,25 @@ const children = defaultFamilyInfo.children;
 
 const defaultSchedules = [
   {
-    id: 1,
-    childId: "dongjun",
+    id: "sample-schedule-1",
+    childId: "sample-child",
     day: "월",
-    title: "한국사",
-    place: "한국사 수업 장소",
-    address: "장소를 입력해주세요",
-    start: "14:00",
-    end: "15:00",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "준비물 확인 필요",
-    alert: "10분 전",
-  },
-  {
-    id: 2,
-    childId: "dongjun",
-    day: "월",
-    title: "파워점핑",
-    place: "파워점핑",
-    address: "장소를 입력해주세요",
-    start: "16:30",
-    end: "17:30",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "운동복, 물병",
-    alert: "15분 전",
-  },
-  {
-    id: 3,
-    childId: "dongjun",
-    day: "화",
-    title: "바둑",
-    place: "바둑 수업 장소",
-    address: "장소를 입력해주세요",
-    start: "14:00",
-    end: "15:00",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "준비물 확인 필요",
-    alert: "10분 전",
-  },
-  {
-    id: 4,
-    childId: "dongjun",
-    day: "수",
-    title: "바둑",
-    place: "바둑 수업 장소",
-    address: "장소를 입력해주세요",
-    start: "14:00",
-    end: "15:00",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "준비물 확인 필요",
-    alert: "10분 전",
-  },
-  {
-    id: 5,
-    childId: "dongjun",
-    day: "수",
-    title: "파워점핑",
-    place: "파워점핑",
-    address: "장소를 입력해주세요",
-    start: "16:30",
-    end: "17:30",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "운동복, 물병",
-    alert: "15분 전",
-  },
-  {
-    id: 6,
-    childId: "dongjun",
-    day: "목",
-    title: "파워점핑",
-    place: "파워점핑",
-    address: "장소를 입력해주세요",
-    start: "16:30",
-    end: "17:30",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "운동복, 물병",
-    alert: "15분 전",
-  },
-  {
-    id: 7,
-    childId: "donghun",
-    day: "월",
-    title: "영어",
-    place: "영어 수업 장소",
+    title: "영어학원",
+    place: "샘플영어학원",
     address: "장소를 입력해주세요",
     start: "16:00",
     end: "17:00",
     status: "대기",
     transport: "이동방법 입력 필요",
-    items: "영어 교재, 필통",
+    items: "교재, 필통",
     alert: "10분 전",
   },
   {
-    id: 8,
-    childId: "donghun",
+    id: "sample-schedule-2",
+    childId: "sample-child",
     day: "월",
     title: "파워점핑",
-    place: "파워점핑",
-    address: "장소를 입력해주세요",
-    start: "18:20",
-    end: "19:20",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "운동복, 물병",
-    alert: "15분 전",
-  },
-  {
-    id: 9,
-    childId: "donghun",
-    day: "화",
-    title: "영어",
-    place: "영어 수업 장소",
-    address: "장소를 입력해주세요",
-    start: "16:00",
-    end: "17:00",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "영어 교재, 필통",
-    alert: "10분 전",
-  },
-  {
-    id: 10,
-    childId: "donghun",
-    day: "화",
-    title: "파워점핑",
-    place: "파워점핑",
-    address: "장소를 입력해주세요",
-    start: "18:20",
-    end: "19:20",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "운동복, 물병",
-    alert: "15분 전",
-  },
-  {
-    id: 11,
-    childId: "donghun",
-    day: "수",
-    title: "영어",
-    place: "영어 수업 장소",
-    address: "장소를 입력해주세요",
-    start: "16:00",
-    end: "17:00",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "영어 교재, 필통",
-    alert: "10분 전",
-  },
-  {
-    id: 12,
-    childId: "donghun",
-    day: "수",
-    title: "파워점핑",
-    place: "파워점핑",
-    address: "장소를 입력해주세요",
-    start: "18:20",
-    end: "19:20",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "운동복, 물병",
-    alert: "15분 전",
-  },
-  {
-    id: 13,
-    childId: "donghun",
-    day: "목",
-    title: "영어",
-    place: "영어 수업 장소",
-    address: "장소를 입력해주세요",
-    start: "16:00",
-    end: "17:00",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "영어 교재, 필통",
-    alert: "10분 전",
-  },
-  {
-    id: 14,
-    childId: "donghun",
-    day: "목",
-    title: "파워점핑",
-    place: "파워점핑",
-    address: "장소를 입력해주세요",
-    start: "18:20",
-    end: "19:20",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "운동복, 물병",
-    alert: "15분 전",
-  },
-  {
-    id: 15,
-    childId: "donghun",
-    day: "금",
-    title: "영어",
-    place: "영어 수업 장소",
-    address: "장소를 입력해주세요",
-    start: "16:00",
-    end: "17:00",
-    status: "대기",
-    transport: "이동방법 입력 필요",
-    items: "영어 교재, 필통",
-    alert: "10분 전",
-  },
-  {
-    id: 16,
-    childId: "donghun",
-    day: "금",
-    title: "파워점핑",
-    place: "파워점핑",
+    place: "샘플파워점핑",
     address: "장소를 입력해주세요",
     start: "18:20",
     end: "19:20",
@@ -1126,7 +929,7 @@ export default function App() {
     document.head.appendChild(link);
   }, []);
   const [role, setRole] = useState("child");
-  const [selectedChild, setSelectedChild] = useState("donghun");
+  const [selectedChild, setSelectedChild] = useState(defaultFamilyInfo.children[0].id);
   const [schedules, setSchedules] = useState(loadSavedSchedules);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedDay, setSelectedDay] = useState(getTodayKoreanDay());
@@ -1262,14 +1065,27 @@ export default function App() {
         const data = await loadCloudFamilyData(familyShareCode);
         if (cancelled) return;
         if (data?.schedules) setSchedules(data.schedules);
+        else setSchedules(defaultSchedules);
         if (data?.locationChecks) setLocationChecks(data.locationChecks);
+        else setLocationChecks({});
         if (data?.defaultAlertTime) setDefaultAlertTime(data.defaultAlertTime);
         if (typeof data?.notificationEnabled === "boolean") setNotificationEnabled(data.notificationEnabled);
         if (data?.parentSecurity) setParentSecurity(data.parentSecurity);
-        if (data?.familyInfo) setFamilyInfo(data.familyInfo);
+        else setParentSecurity({ password: "", lockEnabled: false });
+        if (data?.familyInfo) {
+          setFamilyInfo(data.familyInfo);
+          const loadedChildren = data.familyInfo.children?.length ? data.familyInfo.children : defaultFamilyInfo.children;
+          setSelectedChild((prev) => (loadedChildren.some((child) => child.id === prev) ? prev : loadedChildren[0].id));
+        } else {
+          setFamilyInfo(defaultFamilyInfo);
+          setSelectedChild(defaultFamilyInfo.children[0].id);
+        }
         if (data?.homework) setHomework(data.homework);
+        else setHomework([]);
         if (data?.homeworkPoints) setHomeworkPoints(data.homeworkPoints);
+        else setHomeworkPoints({ points: {}, awardedKeys: [], pointStatusByDate: {} });
         if (data?.notices) setNotices(data.notices);
+        else setNotices([]);
         setSyncStatus("가족 공유 중");
       } catch {
         if (!cancelled) setSyncStatus("공유 연결 실패 · 기기 저장 중");
@@ -1899,6 +1715,14 @@ export default function App() {
     setCurrentUser(newUser);
     setFamilyShareCode(newUser.familyShareCode);
     setFamilyCodeInput(newUser.familyShareCode);
+    setFamilyInfo(defaultFamilyInfo);
+    setSchedules(defaultSchedules);
+    setSelectedChild(defaultFamilyInfo.children[0].id);
+    setHomework([]);
+    setHomeworkPoints({ points: {}, awardedKeys: [], pointStatusByDate: {} });
+    setNotices([]);
+    setLocationChecks({});
+    setParentSecurity({ password: "", lockEnabled: false });
     setAuthMessage("");
     return true;
   };
