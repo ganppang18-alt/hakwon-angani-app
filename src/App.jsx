@@ -631,6 +631,33 @@ function getCurrentSchedule(schedules, childId, selectedDay, nowMinutes = getNow
   return next || childSchedules[childSchedules.length - 1];
 }
 
+function getCurrentScheduleForChildHome(schedules, childId, selectedDay, nowMinutes = getNowMinutes(), beforeMinutes = 30) {
+  const childSchedules = schedules
+    .filter((s) => s.childId === childId && s.day === selectedDay)
+    .filter((s) => s.status !== "귀가 완료")
+    .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+  if (childSchedules.length === 0) return null;
+
+  const nextWithin30 = childSchedules.find((s) => {
+    const startMinutes = timeToMinutes(s.start);
+    return nowMinutes < startMinutes && startMinutes - nowMinutes <= beforeMinutes;
+  });
+  if (nextWithin30) return nextWithin30;
+
+  const ongoing = childSchedules.find(
+    (s) => nowMinutes >= timeToMinutes(s.start) && nowMinutes <= timeToMinutes(s.end)
+  );
+  if (ongoing) return ongoing;
+
+  const previousSchedules = childSchedules.filter((s) => timeToMinutes(s.start) <= nowMinutes);
+  if (previousSchedules.length > 0) {
+    return previousSchedules[previousSchedules.length - 1];
+  }
+
+  return null;
+}
+
 function getNextRemainingSchedule(schedules, nowMinutes = getNowMinutes(), excludeId = null) {
   return [...(schedules || [])]
     .filter((s) => s.id !== excludeId)
@@ -1384,10 +1411,8 @@ export default function App() {
       if (isFutureDate(selectedDate)) return true;
       if (!isTodayDate(selectedDate)) return false;
 
-      // 아이가 '끝났어요'를 눌러도 당일 화면에서 일정 카드가 사라지지 않도록 유지합니다.
-      if (["끝남", "도착 완료"].includes(s.status)) return true;
-
-      return timeToMinutes(s.end || s.start) >= nowMinutes;
+      // 오늘 일정은 끝났거나 시간이 지나도 화면에서 유지합니다.
+      return true;
     });
   }, [todaySchedules, nowTick, selectedDate]);
 
@@ -1395,7 +1420,7 @@ export default function App() {
     if (isFutureDate(selectedDate)) {
       return visibleSchedules[0] || null;
     }
-    return getCurrentSchedule(visibleSchedules, selectedChild, selectedDay);
+    return getCurrentScheduleForChildHome(visibleSchedules, selectedChild, selectedDay, getNowMinutes(new Date(nowTick)), 30);
   }, [visibleSchedules, selectedChild, selectedDay, selectedDate, nowTick]);
 
   const activeAlerts = useMemo(
@@ -1415,6 +1440,7 @@ export default function App() {
   const todayDateLabel = useMemo(() => getTodayDateLabel(selectedDate), [selectedDate]);
 
   const confirmHomeworkPoints = () => {
+    const pointKey = `${selectedChild}-${selectedDateKey}`;
     const canAward = selectedDateHomework.length > 0 && selectedDateHomework.every((item) => item.done);
 
     if (!canAward) return;
@@ -1426,6 +1452,10 @@ export default function App() {
         [selectedChild]: (prev?.points?.[selectedChild] || 0) + 500,
       },
       awardedKeys: [...(prev?.awardedKeys || [])],
+      pointStatusByDate: {
+        ...(prev?.pointStatusByDate || {}),
+        [pointKey]: "paid",
+      },
     }));
 
     setAppAlerts((prev) => [
@@ -1440,6 +1470,7 @@ export default function App() {
   };
 
   const deductHomeworkPoints = (amount = 500) => {
+    const pointKey = `${selectedChild}-${selectedDateKey}`;
     setHomeworkPoints((prev) => {
       const currentPoints = prev.points?.[selectedChild] || 0;
       const nextPoints = Math.max(0, currentPoints - amount);
@@ -1448,6 +1479,10 @@ export default function App() {
         points: {
           ...(prev.points || {}),
           [selectedChild]: nextPoints,
+        },
+        pointStatusByDate: {
+          ...(prev?.pointStatusByDate || {}),
+          [pointKey]: "idle",
         },
       };
     });
@@ -2061,7 +2096,7 @@ export default function App() {
                 deleteHomework={deleteHomework}
                 role={role}
                 homeworkPoints={homeworkPoints.points?.[selectedChild] || 0}
-                pointAwardedToday={false}
+                pointAwardedToday={homeworkPoints.pointStatusByDate?.[`${selectedChild}-${selectedDateKey}`] === "paid"}
                 selectedDateLabel={todayDateLabel}
                 onConfirmHomeworkPoints={confirmHomeworkPoints}
                 onDeductHomeworkPoints={deductHomeworkPoints}
@@ -2568,7 +2603,12 @@ function ChildView({
   cancelScheduleForm,
   selectedDateLabel,
 }) {
+  const [showParentContact, setShowParentContact] = useState(false);
+  const contacts = parentContacts?.filter((parent) => parent.phone?.trim()) || [];
+  const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
+
   if (!current) {
+    const nextSchedules = getRemainingSchedules(schedules, isTodayDate(selectedDate) ? getNowMinutes() : 0);
     const selfTasks = [
       { icon: "✏️", title: "숙제 확인하기", desc: "오늘 해야 할 숙제가 있는지 살펴봐요." },
       { icon: "🎒", title: "가방 정리하기", desc: "내일 필요한 책과 준비물을 챙겨요." },
@@ -2576,38 +2616,100 @@ function ChildView({
     ];
 
     return (
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-        <Card className="rounded-[1.7rem] border border-rose-100 bg-white/90 shadow-sm">
-          <CardContent className="p-4">
-            <div className="mb-3 text-center">
-              <p className="text-xs font-bold text-rose-400">{child.name} · {selectedDay}요일</p>
-              <h2 className="mt-1 text-xl font-black text-slate-900">오늘은 학원 일정이 없어요</h2>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+        <Card className="rounded-[1.55rem] border border-rose-100 bg-white/95 shadow-[0_8px_20px_rgba(244,114,182,0.11)]">
+          <CardContent className="p-2.5">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
+                {child.name} · {child.grade}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdd((prev) => !prev)}
+                className="shrink-0 rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm transition hover:bg-rose-50"
+              >
+                일정 직접 입력
+              </button>
+            </div>
+
+            <div className="mb-1.5 rounded-[1.35rem] bg-gradient-to-br from-white via-rose-50/80 to-white p-3 text-center shadow-sm">
+              <div className="mb-1.5 flex items-center justify-center gap-1.5">
+                <span className="text-sm">🗓️</span>
+                <p className="text-[13px] font-black text-rose-500">지금 할 일</p>
+              </div>
+              <h2 className="text-xl font-black text-slate-900">아직 지금 할 일은 없어요</h2>
               <p className="mt-1 break-keep text-xs font-bold leading-5 text-slate-400">
-                스스로 할 일을 하나 골라보면 더 멋진 하루가 돼요.
+                다음 일정은 시작 30분 전부터 지금 할 일로 올라와요.
               </p>
             </div>
-            <div className="space-y-2">
-              {selfTasks.map((task) => (
-                <div key={task.title} className="flex items-center gap-3 rounded-2xl bg-rose-50/70 p-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-xl shadow-sm">{task.icon}</div>
-                  <div>
-                    <p className="text-sm font-black text-slate-900">{task.title}</p>
-                    <p className="mt-0.5 break-keep text-xs font-bold leading-4 text-slate-400">{task.desc}</p>
-                  </div>
+
+            <div className="rounded-[1.25rem] border border-violet-100 bg-violet-50/70 p-2 shadow-sm">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">🗓️</span>
+                  <p className="text-sm font-black text-violet-500">다음에 할 일</p>
                 </div>
-              ))}
+                {nextSchedules.length > 0 && (
+                  <span className="rounded-full border border-violet-200 bg-white px-2 py-0.5 text-[10px] font-black text-violet-500">
+                    {nextSchedules.length}개 남음
+                  </span>
+                )}
+              </div>
+
+              {nextSchedules.length > 0 ? (
+                <div className="overflow-hidden rounded-[1rem] border border-violet-100 bg-white shadow-sm">
+                  <div className="grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center border-b border-violet-100 px-2.5 py-1 text-[10px] font-black text-violet-400">
+                    <span className="text-center">시간</span>
+                    <span className="text-center">과목</span>
+                    <span className="text-center">장소</span>
+                  </div>
+                  {nextSchedules.slice(0, 2).map((schedule, index) => (
+                    <div
+                      key={`next-wait-${schedule.id}`}
+                      className={`grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center gap-1 px-2.5 py-1.5 ${index !== Math.min(nextSchedules.length, 2) - 1 ? "border-b border-violet-50" : ""}`}
+                    >
+                      <p className="truncate text-center text-[11px] font-black text-violet-600">{formatKoreanTime(schedule.start)}</p>
+                      <p className="truncate text-center text-xs font-black text-slate-900">{schedule.title}</p>
+                      <p className="truncate text-center text-[12px] font-black text-slate-900">{schedule.place}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {selfTasks.map((task) => (
+                    <div key={task.title} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-xl shadow-sm">{task.icon}</div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900">{task.title}</p>
+                        <p className="mt-0.5 break-keep text-xs font-bold leading-4 text-slate-400">{task.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
+
+        {showAdd && (
+          <ChildScheduleAddBox
+            showAdd={showAdd}
+            setShowAdd={setShowAdd}
+            newSchedule={newSchedule}
+            updateNewSchedule={updateNewSchedule}
+            addSchedule={addSchedule}
+            cancelScheduleForm={cancelScheduleForm}
+            selectedDateLabel={selectedDateLabel}
+            child={child}
+            selectedDay={selectedDay}
+          />
+        )}
       </motion.div>
     );
   }
 
   const nextBaseMinutes = isTodayDate(selectedDate) ? getNowMinutes() : timeToMinutes(current.start);
   const remainingSchedules = getRemainingSchedules(schedules, nextBaseMinutes, current?.id);
-  const contacts = parentContacts?.filter((parent) => parent.phone?.trim()) || [];
-  const smsText = encodeURIComponent(`${child.name} 연락이 필요해요.`);
-  const [showParentContact, setShowParentContact] = useState(false);
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
@@ -3029,7 +3131,11 @@ function HomeworkPanel({
   onDeductHomeworkPoints,
   selectedDateLabel,
 }) {
-  const [pointActionStatus, setPointActionStatus] = useState("idle");
+  const [pointActionStatus, setPointActionStatus] = useState(pointAwardedToday ? "paid" : "idle");
+
+  useEffect(() => {
+    setPointActionStatus(pointAwardedToday ? "paid" : "idle");
+  }, [pointAwardedToday]);
   const doneCount = homework.filter((item) => item.done).length;
   const totalCount = homework.length;
   const allHomeworkDone = totalCount > 0 && doneCount === totalCount;
@@ -3044,7 +3150,9 @@ function HomeworkPanel({
               <p className="text-xs font-bold text-rose-400">
                 {child.name} · {selectedDateLabel || `${selectedDay}요일`}
               </p>
-              <h2 className="mt-1 text-2xl font-black text-slate-900">일일미션</h2>
+              <div className="mt-1 flex items-center gap-2">
+                <h2 className="text-2xl font-black text-slate-900">일일미션</h2>
+              </div>
               <p className="mt-1 break-keep text-xs leading-5 text-slate-500">
                 생각난 숙제를 바로 적고, 끝나면 체크해요.
               </p>
@@ -3107,9 +3215,16 @@ function HomeworkPanel({
                     {item.done ? <CheckCircle2 size={22} /> : "○"}
                   </button>
                   <div className="min-w-0 flex-1">
-                    <p className={`break-keep font-black ${item.done ? "text-emerald-700 line-through" : "text-slate-900"}`}>
-                      {item.text}
-                    </p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <p className={`break-keep font-black ${item.done ? "text-emerald-700 line-through" : "text-slate-900"}`}>
+                        {item.text}
+                      </p>
+                      {pointActionStatus === "paid" && item.done && (
+                        <span className="shrink-0 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black text-white shadow-sm">
+                          확인완료
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-0.5 text-xs font-bold text-slate-400">{item.done ? "완료했어요" : "아직 해야 해요"}</p>
                   </div>
                   <button
@@ -3126,7 +3241,8 @@ function HomeworkPanel({
           )}
 
           {role === "parent" && (
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <>
+              <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 className={`h-11 rounded-3xl border-2 text-sm font-black shadow-sm transition disabled:opacity-40 ${
@@ -3155,15 +3271,16 @@ function HomeworkPanel({
                 500포인트 차감
               </button>
             </div>
+            </>
           )}
 
           <div className="mt-3 rounded-3xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-500">
             {waitingParentConfirm
-              ? role === "parent"
-                ? pointActionStatus === "paid"
-                  ? "500포인트가 지급됐어요. 차감하면 다시 지급할 수 있습니다."
-                  : "일일미션 완료를 확인한 뒤 500포인트를 지급할 수 있습니다."
-                : "일일미션을 모두 완료했어요. 부모님 확인을 기다리는 중이에요."
+              ? pointActionStatus === "paid"
+                ? "포인트 지급이 완료됐어요."
+                : role === "parent"
+                  ? "일일미션 완료를 확인한 뒤 500포인트를 지급할 수 있습니다."
+                  : "일일미션을 모두 완료했어요. 부모님 확인을 기다리는 중이에요."
               : role === "child"
                 ? "일일미션을 모두 체크하면 부모님 확인 후 500포인트를 받을 수 있어요."
                 : "일일미션을 모두 완료하면 포인트 지급 버튼이 활성화됩니다."}
