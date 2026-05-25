@@ -1848,7 +1848,7 @@ export default function App() {
 
       <div className="relative z-10 mx-auto max-w-md px-2.5 py-2">
         <header className="mb-1.5 rounded-[1.5rem] border border-white/80 bg-white/85 p-2.5 shadow-[0_8px_22px_rgba(244,114,182,0.12)] backdrop-blur">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
             <div className="inline-flex min-w-0 items-center gap-1 rounded-full border border-rose-100 bg-rose-50/80 px-2.5 py-1 text-[10px] font-black text-rose-500 shadow-sm" style={{ fontFamily: appFontFamily }}>
               <CalendarDays size={12} />
               <span className="truncate">초등학생 동선 알림앱</span>
@@ -2610,9 +2610,9 @@ function ChildView({
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
 
-      <Card className="overflow-hidden rounded-[1.7rem] border border-rose-100 bg-white/95 shadow-[0_10px_24px_rgba(244,114,182,0.12)]">
-        <CardContent className="p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
+      <Card className="overflow-hidden rounded-[1.55rem] border border-rose-100 bg-white/95 shadow-[0_8px_20px_rgba(244,114,182,0.11)]">
+        <CardContent className="p-2.5">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
             <div className="truncate rounded-full border border-rose-100 bg-white/90 px-2 py-1 text-[10px] font-black text-rose-500 shadow-sm">
               {child.name} · {child.grade}
             </div>
@@ -2625,41 +2625,41 @@ function ChildView({
             </button>
           </div>
 
-          <div className="mb-2 rounded-[1.45rem] bg-gradient-to-br from-white via-rose-50/80 to-white p-3 shadow-sm">
-            <div className="mb-2 flex items-center gap-1.5">
-              <span className="text-base">🗓️</span>
-              <p className="text-sm font-black text-rose-500">지금 할 일</p>
+          <div className="mb-1.5 rounded-[1.35rem] bg-gradient-to-br from-white via-rose-50/80 to-white p-2.5 shadow-sm">
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <span className="text-sm">🗓️</span>
+              <p className="text-[13px] font-black text-rose-500">지금 할 일</p>
             </div>
 
-            <div className="mb-3 text-center">
-              <h2 className="truncate text-[40px] font-black leading-none tracking-tight text-rose-500">
+            <div className="mb-2 text-center">
+              <h2 className="truncate text-[34px] font-black leading-none tracking-tight text-rose-500">
                 {current.title}
               </h2>
-              <div className="mx-auto mt-1.5 h-1.5 w-24 rounded-full bg-yellow-300/80" />
+              <div className="mx-auto mt-1 h-1 w-20 rounded-full bg-yellow-300/80" />
             </div>
 
-            <div className="grid grid-cols-[0.9fr_1.1fr] items-stretch gap-2">
-              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-2 py-3 text-center shadow-[0_6px_16px_rgba(14,165,233,0.16)]">
+            <div className="grid grid-cols-[0.9fr_1.1fr] items-stretch gap-1.5">
+              <div className="flex min-w-0 flex-col justify-center rounded-[1.1rem] border-2 border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-2 py-2.5 text-center shadow-[0_6px_16px_rgba(14,165,233,0.16)]">
                 <div className="mb-0.5 flex items-center justify-center gap-1">
-                  <span className="text-base leading-none">📍</span>
-                  <span className="text-[12px] font-black text-sky-500">장소</span>
+                  <span className="text-sm leading-none">📍</span>
+                  <span className="text-[11px] font-black text-sky-500">장소</span>
                 </div>
-                <p className="truncate text-[15px] font-black text-slate-950">{current.place}</p>
+                <p className="truncate text-[14px] font-black text-slate-950">{current.place}</p>
               </div>
 
-              <div className="flex min-w-0 flex-col justify-center rounded-[1.2rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 px-2 py-3 text-center shadow-[0_6px_16px_rgba(244,114,182,0.16)]">
+              <div className="flex min-w-0 flex-col justify-center rounded-[1.1rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 px-2 py-2.5 text-center shadow-[0_6px_16px_rgba(244,114,182,0.16)]">
                 <div className="mb-0.5 flex items-center justify-center gap-1">
-                  <span className="text-base leading-none">🕒</span>
-                  <span className="text-[12px] font-black text-rose-500">시간</span>
+                  <span className="text-sm leading-none">🕒</span>
+                  <span className="text-[11px] font-black text-rose-500">시간</span>
                 </div>
-                <p className="whitespace-normal break-keep text-[15px] font-black leading-tight text-rose-700">
+                <p className="whitespace-normal break-keep text-[14px] font-black leading-tight text-rose-700">
                   {formatKoreanTimeRange(current.start, current.end).replace(" ~ ", "~")}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[1.4rem] border border-violet-100 bg-violet-50/70 p-2.5 shadow-sm">
+          <div className="rounded-[1.25rem] border border-violet-100 bg-violet-50/70 p-2 shadow-sm">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-base">🗓️</span>
@@ -2673,8 +2673,8 @@ function ChildView({
             </div>
 
             {remainingSchedules.length > 0 ? (
-              <div className="overflow-hidden rounded-[1.1rem] border border-violet-100 bg-white shadow-sm">
-                <div className="grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center border-b border-violet-100 px-2.5 py-1.5 text-[10px] font-black text-violet-400">
+              <div className="overflow-hidden rounded-[1rem] border border-violet-100 bg-white shadow-sm">
+                <div className="grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center border-b border-violet-100 px-2.5 py-1 text-[10px] font-black text-violet-400">
                   <span className="text-center">시간</span>
                   <span className="text-center">과목</span>
                   <span className="text-center">장소</span>
@@ -2682,7 +2682,7 @@ function ChildView({
                 {remainingSchedules.slice(0, 2).map((schedule, index) => (
                   <div
                     key={`next-${schedule.id}`}
-                    className={`grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center gap-1 px-2.5 py-2 ${index !== Math.min(remainingSchedules.length, 2) - 1 ? "border-b border-violet-50" : ""}`}
+                    className={`grid grid-cols-[82px_minmax(70px,1fr)_minmax(78px,1.15fr)] items-center gap-1 px-2.5 py-1.5 ${index !== Math.min(remainingSchedules.length, 2) - 1 ? "border-b border-violet-50" : ""}`}
                   >
                     <p className="truncate text-center text-[11px] font-black text-violet-600">{formatKoreanTime(schedule.start)}</p>
                     <p className="truncate text-center text-xs font-black text-slate-900">{schedule.title}</p>
@@ -2719,11 +2719,11 @@ function ChildView({
         />
       )}
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-1.5">
         <button
           type="button"
           onClick={() => updateStatus(current.id, current.status === "도착 완료" ? "대기" : "도착 완료")}
-          className={`h-11 rounded-[1.2rem] border-2 text-sm font-black shadow-[0_6px_16px_rgba(16,185,129,0.14)] transition hover:scale-[1.01] ${
+          className={`h-10 rounded-[1.1rem] border-2 text-[13px] font-blacklack shadow-[0_6px_16px_rgba(16,185,129,0.14)] transition hover:scale-[1.01] ${
             current.status === "도착 완료"
               ? "border-emerald-500 bg-emerald-500 text-white"
               : "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50 text-emerald-700 hover:border-emerald-300"
@@ -2745,11 +2745,11 @@ function ChildView({
       </div>
 
       {contacts.length > 0 && (
-        <div className="rounded-[1.5rem] border border-rose-100 bg-white/90 p-2 shadow-sm">
+        <div className="rounded-[1.35rem] border border-rose-100 bg-white/90 p-1.5 shadow-sm">
           <button
             type="button"
             onClick={() => setShowParentContact((prev) => !prev)}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-[1.2rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 text-sm font-black text-rose-600 shadow-[0_6px_16px_rgba(244,114,182,0.14)] transition hover:scale-[1.01] hover:border-rose-300"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-[1.1rem] border-2 border-rose-200 bg-gradient-to-br from-rose-50 via-white to-pink-50 text-sm font-black text-rose-600 shadow-[0_6px_16px_rgba(244,114,182,0.14)] transition hover:scale-[1.01] hover:border-rose-300"
           >
             <Phone size={16} /> 부모님께 연락하기
           </button>
