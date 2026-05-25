@@ -793,6 +793,26 @@ function saveNotificationEnabledToStorage(enabled) {
   }
 }
 
+function loadSentAlertIds() {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    const saved = localStorage.getItem("hakwonSentAlertIds");
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSentAlertIdsToStorage(ids) {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("hakwonSentAlertIds", JSON.stringify(ids));
+    }
+  } catch {
+    // 저장 공간이 막힌 환경에서는 화면 상태만 유지합니다.
+  }
+}
+
 function saveAlertSettingToStorage(alertTime) {
   try {
     if (typeof localStorage !== "undefined") {
@@ -1111,7 +1131,7 @@ export default function App() {
   const [notificationPermission, setNotificationPermission] = useState(
     typeof Notification === "undefined" ? "unsupported" : Notification.permission
   );
-  const [sentAlertIds, setSentAlertIds] = useState([]);
+  const [sentAlertIds, setSentAlertIds] = useState(loadSentAlertIds);
   const [appAlerts, setAppAlerts] = useState([]);
   const [urgentAlert, setUrgentAlert] = useState(null);
   const [statusConfirm, setStatusConfirm] = useState(null);
@@ -1151,6 +1171,10 @@ export default function App() {
   useEffect(() => {
     saveNotificationEnabledToStorage(notificationEnabled);
   }, [notificationEnabled]);
+
+  useEffect(() => {
+    saveSentAlertIdsToStorage(sentAlertIds);
+  }, [sentAlertIds]);
 
   useEffect(() => {
     saveLocationChecksToStorage(locationChecks);
@@ -1511,8 +1535,12 @@ export default function App() {
   useEffect(() => {
     if (!notificationEnabled) return;
     activeAlerts.forEach((alert) => {
-      const alertId = `${alert.id}-${alert.day}-${alert.start}`;
+      const alertId = `${selectedDateKey}-${alert.id}-${alert.day}-${alert.start}-${alert.alertMinutes}`;
       if (sentAlertIds.includes(alertId)) return;
+
+      // 알림은 설정한 시간대에 들어왔을 때 일정별로 1회만 보냅니다.
+      // 예: 10분 전 설정이면 diff가 10분 이하로 처음 들어온 순간 1회만 발송합니다.
+      if (alert.diff < 0 || alert.diff > alert.alertMinutes) return;
 
       const childName = appChildren.find((c) => c.id === alert.childId)?.name || "아이";
       const title = `${childName}, ${alert.title} 갈 시간이에요`;
@@ -1556,9 +1584,12 @@ export default function App() {
         // 브라우저가 알림을 제한해도 앱은 계속 동작합니다.
       }
 
-      setSentAlertIds((prev) => [...prev, alertId]);
+      setSentAlertIds((prev) => {
+        if (prev.includes(alertId)) return prev;
+        return [...prev, alertId].slice(-200);
+      });
     });
-  }, [activeAlerts, notificationPermission, sentAlertIds, notificationEnabled]);
+  }, [activeAlerts, notificationPermission, sentAlertIds, notificationEnabled, selectedDateKey]);
 
   const requestNotificationPermission = async () => {
     try {
